@@ -12,6 +12,7 @@ typedef enum MayaError_t {
     ERR_STACK_OVERFLOW,
     ERR_STACK_UNDERFLOW,
     ERR_INVALID_OPERAND,
+    ERR_INVALID_INSTRUCTION,
 } MayaError;
 
 const char* maya_error_to_str(MayaError error) {
@@ -24,6 +25,8 @@ const char* maya_error_to_str(MayaError error) {
         return "STACK UNDERFLOW";
     case ERR_INVALID_OPERAND:
         return "INVALID OPERAND";
+    case ERR_INVALID_INSTRUCTION:
+        return "INVALID INSTRUCTION";
     }
 }
 
@@ -255,6 +258,8 @@ MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruction) {
         error = maya_pop_stack(maya, &maya->registers[instruction.operand]);
         maya->pc++;
         break;
+    default:
+        return ERR_INVALID_INSTRUCTION;
     }
 
     return error;
