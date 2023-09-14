@@ -11,6 +11,7 @@ typedef enum MayaError_t {
     ERR_OK,
     ERR_STACK_OVERFLOW,
     ERR_STACK_UNDERFLOW,
+    ERR_INVALID_OPERAND,
 } MayaError;
 
 const char* maya_error_to_str(MayaError error) {
@@ -21,6 +22,8 @@ const char* maya_error_to_str(MayaError error) {
         return "STACK OVERFLOW";
     case ERR_STACK_UNDERFLOW:
         return "STACK UNDERFLOW";
+    case ERR_INVALID_OPERAND:
+        return "INVALID OPERAND";
     }
 }
 
@@ -52,9 +55,9 @@ typedef struct MayaInstruction_t {
 typedef struct MayaVm_t {
     size_t pc; // program counter
     size_t sp; // stack pointer
+    MayaInstruction* program;
     int64_t stack[MAYA_STACK_CAP];
     int64_t registers[MAYA_REGISTERS_CAP];
-    MayaInstruction* program;
     bool halt;
 } MayaVm;
 
@@ -65,6 +68,9 @@ void maya_init(MayaVm* maya, MayaInstruction* program) {
     maya->pc = 0;
     maya->sp = 0;
     maya->program = program;
+
+    for (size_t i = 0; i < MAYA_REGISTERS_CAP; i++)
+        maya->registers[i] = 0;
 }
 
 void maya_debug_stack(MayaVm* maya) {
@@ -72,6 +78,13 @@ void maya_debug_stack(MayaVm* maya) {
 
     for (size_t i = 0; i < maya->sp; i++)
         printf("%ld\n", maya->stack[i]);
+}
+
+void maya_debug_registers(MayaVm* maya) {
+    printf("REGISTERS:\n");
+
+    for (size_t i = 0; i < MAYA_REGISTERS_CAP; i++)
+        printf("%c: %ld\n", 'a' + (char)i, maya->registers[i]);
 }
 
 MayaError maya_push_stack(MayaVm* maya, int64_t value) {
@@ -229,7 +242,18 @@ MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruction) {
         maya->pc = temps[0];
         break;
     case OP_LOAD:
+        if (instruction.operand < 0 || instruction.operand >= MAYA_REGISTERS_CAP)
+            return ERR_INVALID_OPERAND;
+
+        error = maya_push_stack(maya, maya->registers[instruction.operand]);
+        maya->pc++;
+        break;
     case OP_STORE:
+        if (instruction.operand < 0 || instruction.operand >= MAYA_REGISTERS_CAP)
+            return ERR_INVALID_OPERAND;
+
+        error = maya_pop_stack(maya, &maya->registers[instruction.operand]);
+        maya->pc++;
         break;
     }
 
@@ -238,7 +262,6 @@ MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruction) {
 
 void maya_execute_program(MayaVm* maya) {
     while (!maya->halt) {
-        maya_debug_stack(maya);
         MayaError error = maya_execute_instruction(maya, maya->program[maya->pc]);
         if (error != ERR_OK) {
             fprintf(stderr, "ERROR: %s\n", maya_error_to_str(error));
@@ -248,18 +271,33 @@ void maya_execute_program(MayaVm* maya) {
 }
 
 int main() {
+    // this program computes factorial of 12, which is 479,001,600.
     MayaInstruction program[] = {
         { OP_PUSH, 1 },
+        { OP_STORE, 0 },
+
+        { OP_PUSH, 1 },
+
+        { OP_LOAD, 0 },
         { OP_PUSH, 1 },
         { OP_ADD },
+
         { OP_DUP, 1 },
-        { OP_PUSH, 10 },
-        { OP_JLT, 1 },
-        { OP_HALT },
+        { OP_STORE, 0 },
+
+        { OP_MUL },
+
+        { OP_LOAD, 0 },
+        { OP_PUSH, 12 },
+
+        { OP_JNEQ, 3 },
+
+        { OP_HALT }
     };
 
     MayaVm maya;
     maya_init(&maya, program);
     maya_execute_program(&maya);
     maya_debug_stack(&maya);
+    maya_debug_registers(&maya);
 }
