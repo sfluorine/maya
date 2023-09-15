@@ -13,7 +13,7 @@ add
 dup 1
 store 0
 
-mul  # multiply it :^)
+mul
 
 load 0 
 push 20 # factorial of 20
