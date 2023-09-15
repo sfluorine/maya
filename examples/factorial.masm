@@ -1,0 +1,23 @@
+# initial setup
+push 1
+store 0 
+
+push 1
+
+loop:
+
+load 0
+push 1
+add
+
+dup 1
+store 0
+
+mul  # multiply it :^)
+
+load 0 
+push 20 # factorial of 20
+
+jneq loop
+
+halt

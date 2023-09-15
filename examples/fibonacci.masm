@@ -1,0 +1,22 @@
+fibonacci:
+    push 0
+    push 1
+    push 0
+    store 0
+
+loop:
+    dup 2
+    dup 2
+    add
+
+    load 0
+    push 1
+    add
+    store 0
+
+    load 0
+    push 8
+
+    jneq loop
+
+    halt

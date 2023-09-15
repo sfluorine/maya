@@ -1,21 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
-#include <assert.h>
-#include <stdbool.h>
+#include <string.h>
+#include <errno.h>
 
-#define MAYA_STACK_CAP 1024
-#define MAYA_REGISTERS_CAP 5
+#include "maya.h"
 
-typedef enum MayaError_t {
-    ERR_OK,
-    ERR_STACK_OVERFLOW,
-    ERR_STACK_UNDERFLOW,
-    ERR_INVALID_OPERAND,
-    ERR_INVALID_INSTRUCTION,
-} MayaError;
-
-const char* maya_error_to_str(MayaError error) {
+static const char* maya_error_to_str(MayaError error) {
     switch (error) {
     case ERR_OK:
         return "OK";
@@ -30,67 +20,7 @@ const char* maya_error_to_str(MayaError error) {
     }
 }
 
-typedef enum MayaOpCode_t {
-    OP_HALT,
-    OP_PUSH,
-    OP_POP,
-    OP_DUP,
-    OP_ADD,
-    OP_SUB,
-    OP_MUL,
-    OP_DIV,
-    OP_JMP,
-    OP_JEQ,
-    OP_JNEQ,
-    OP_JGT,
-    OP_JLT,
-    OP_CALL,
-    OP_RET,
-    OP_LOAD,
-    OP_STORE,
-} MayaOpCode;
-
-typedef struct MayaInstruction_t {
-    MayaOpCode opcode;
-    int64_t operand;
-} MayaInstruction;
-
-typedef struct MayaVm_t {
-    size_t pc; // program counter
-    size_t sp; // stack pointer
-    MayaInstruction* program;
-    int64_t stack[MAYA_STACK_CAP];
-    int64_t registers[MAYA_REGISTERS_CAP];
-    bool halt;
-} MayaVm;
-
-void maya_init(MayaVm* maya, MayaInstruction* program) {
-    assert(maya != NULL);
-    assert(program != NULL);
-
-    maya->pc = 0;
-    maya->sp = 0;
-    maya->program = program;
-
-    for (size_t i = 0; i < MAYA_REGISTERS_CAP; i++)
-        maya->registers[i] = 0;
-}
-
-void maya_debug_stack(MayaVm* maya) {
-    printf("STACK:\n");
-
-    for (size_t i = 0; i < maya->sp; i++)
-        printf("%ld\n", maya->stack[i]);
-}
-
-void maya_debug_registers(MayaVm* maya) {
-    printf("REGISTERS:\n");
-
-    for (size_t i = 0; i < MAYA_REGISTERS_CAP; i++)
-        printf("%c: %ld\n", 'a' + (char)i, maya->registers[i]);
-}
-
-MayaError maya_push_stack(MayaVm* maya, int64_t value) {
+static MayaError maya_push_stack(MayaVm* maya, int64_t value) {
     if (maya->sp >= MAYA_STACK_CAP)
         return ERR_STACK_OVERFLOW;
 
@@ -98,7 +28,7 @@ MayaError maya_push_stack(MayaVm* maya, int64_t value) {
     return ERR_OK;
 }
 
-MayaError maya_pop_stack(MayaVm* maya, int64_t* output) {
+static MayaError maya_pop_stack(MayaVm* maya, int64_t* output) {
     if (maya->sp <= 0)
         return ERR_STACK_UNDERFLOW;
 
@@ -109,7 +39,7 @@ MayaError maya_pop_stack(MayaVm* maya, int64_t* output) {
     return ERR_OK;
 }
 
-MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruction) {
+static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruction) {
     MayaError error = ERR_OK;
     int64_t temps[2];
 
@@ -265,7 +195,32 @@ MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruction) {
     return error;
 }
 
-void maya_execute_program(MayaVm* maya) {
+static void maya_init(MayaVm* maya, MayaInstruction* program) {
+    maya->pc = 0;
+    maya->sp = 0;
+    maya->program = program;
+
+    for (size_t i = 0; i < MAYA_REGISTERS_CAP; i++)
+        maya->registers[i] = 0;
+
+    maya->halt = false;
+}
+
+static void maya_debug_stack(MayaVm* maya) {
+    printf("STACK:\n");
+
+    for (size_t i = 0; i < maya->sp; i++)
+        printf("%ld\n", maya->stack[i]);
+}
+
+static void maya_debug_registers(MayaVm* maya) {
+    printf("REGISTERS:\n");
+
+    for (size_t i = 0; i < MAYA_REGISTERS_CAP; i++)
+        printf("%c: %ld\n", 'a' + (char)i, maya->registers[i]);
+}
+
+static void maya_execute_program(MayaVm* maya) {
     while (!maya->halt) {
         MayaError error = maya_execute_instruction(maya, maya->program[maya->pc]);
         if (error != ERR_OK) {
@@ -275,34 +230,66 @@ void maya_execute_program(MayaVm* maya) {
     }
 }
 
-int main() {
-    // this program computes factorial of 12, which is 479,001,600.
-    MayaInstruction program[] = {
-        { OP_PUSH, 1 },
-        { OP_STORE, 0 },
+static MayaInstruction* maya_load_program_from_file(const char* input_file) {
+    FILE* input_stream = fopen(input_file, "rb");
+    if (!input_stream) {
+        fprintf(stderr, "ERROR: cannot open file '%s'\n", input_file);
+        exit(EXIT_FAILURE);
+    }
 
-        { OP_PUSH, 1 },
+    fseek(input_stream, 0, SEEK_END);
+    long size = ftell(input_stream) / sizeof(MayaInstruction);
+    fseek(input_stream, 0, SEEK_SET);
 
-        { OP_LOAD, 0 },
-        { OP_PUSH, 1 },
-        { OP_ADD },
+    MayaInstruction* instruction = malloc(sizeof(MayaInstruction) * size);
+    if (!instruction) {
+        fprintf(stderr, "ERROR: cannot allocate memory!\n");
+        exit(EXIT_FAILURE);
+    }
 
-        { OP_DUP, 1 },
-        { OP_STORE, 0 },
+    fread(instruction, sizeof(MayaInstruction), size, input_stream);
+    if (ferror(input_stream)) {
+        fprintf(stderr, "ERROR: error while reading file: %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
 
-        { OP_MUL },
+    fclose(input_stream);
+    return instruction;
+}
 
-        { OP_LOAD, 0 },
-        { OP_PUSH, 12 },
+static char* shift(int* argc, char*** argv) {
+    if (*argc == 0)
+        return NULL;
 
-        { OP_JNEQ, 3 },
+    char* arg = *argv[0];
+    *argv += 1;
+    *argc -= 1;
 
-        { OP_HALT }
-    };
+    return arg;
+}
+
+static void usage(const char* program) {
+    fprintf(stderr, "Usage: %s <input_file.maya>\n", program);
+}
+
+int main(int argc, char** argv) {
+    const char* program_name = shift(&argc, &argv);
+
+    if (argc == 0) {
+        usage(program_name);
+        fprintf(stderr, "ERROR: expected input file!\n");
+        return 1;
+    }
+
+    const char* input_file = shift(&argc, &argv);
+    MayaInstruction* program = maya_load_program_from_file(input_file);
 
     MayaVm maya;
     maya_init(&maya, program);
     maya_execute_program(&maya);
+
+    free(program);
+
     maya_debug_stack(&maya);
     maya_debug_registers(&maya);
 }
