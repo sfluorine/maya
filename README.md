@@ -6,7 +6,7 @@ A simple stack based virtual machine.
 
 ```console
 $ mkdir build
-$ cmake -B build -G ninja
+$ cmake -B build -G Ninja
 $ cd build
 $ ninja
 ```
