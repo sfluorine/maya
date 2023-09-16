@@ -23,5 +23,5 @@ $ ./build/maya -e factorial.maya
 Or in one command
 
 ```console
-$ ./build/maya -a example/factorial.masm factorial.maya -e factorial./maya
+$ ./build/maya -a example/factorial.masm factorial.maya -e factorial.maya
 ```
