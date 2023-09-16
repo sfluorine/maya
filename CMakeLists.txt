@@ -2,5 +2,4 @@ cmake_minimum_required(VERSION 3.11)
 
 project(maya LANGUAGES C)
 
-add_executable(maya src/maya.c)
-add_executable(mayasm src/mayasm.c)
+add_executable(maya src/maya.c src/mayasm.c)

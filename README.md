@@ -16,6 +16,6 @@ $ ninja
 To execute the factorial example program:
 
 ```console
-$ ./build/mayasm example/factorial.masm factorial.maya
-$ ./build/maya factorial.maya
+$ ./build/maya -a example/factorial.masm factorial.maya
+$ ./build/maya -e factorial.maya
 ```
