@@ -5,7 +5,9 @@
 #include <stdbool.h>
 
 #define MAYA_STACK_CAP 1024
-#define MAYA_REGISTERS_CAP 5
+#define MAYA_REGISTERS_CAP 7
+#define MAYA_STACK_POINTER_REG 5
+#define MAYA_RETURN_VALUE_REG 6
 
 typedef enum MayaError_t {
     ERR_OK,
@@ -20,10 +22,14 @@ typedef enum MayaOpCode_t {
     OP_PUSH,
     OP_POP,
     OP_DUP,
-    OP_ADD,
-    OP_SUB,
-    OP_MUL,
-    OP_DIV,
+    OP_IADD,
+    OP_FADD,
+    OP_ISUB,
+    OP_FSUB,
+    OP_IMUL,
+    OP_FMUL,
+    OP_IDIV,
+    OP_FDIV,
     OP_JMP,
     OP_JEQ,
     OP_JNEQ,
@@ -33,6 +39,9 @@ typedef enum MayaOpCode_t {
     OP_RET,
     OP_LOAD,
     OP_STORE,
+    OP_DEBUG_PRINT_INT,
+    OP_DEBUG_PRINT_DOUBLE,
+    OP_DEBUG_PRINT_CHAR,
 } MayaOpCode;
 
 typedef struct MayaInstruction_t {

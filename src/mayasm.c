@@ -12,10 +12,14 @@ typedef enum TokenType_t {
     TOK_PUSH,
     TOK_POP,
     TOK_DUP,
-    TOK_ADD,
-    TOK_SUB,
-    TOK_MUL,
-    TOK_DIV,
+    TOK_IADD,
+    TOK_FADD,
+    TOK_ISUB,
+    TOK_FSUB,
+    TOK_IMUL,
+    TOK_FMUL,
+    TOK_IDIV,
+    TOK_FDIV,
     TOK_JMP,
     TOK_JEQ,
     TOK_JNEQ,
@@ -25,10 +29,14 @@ typedef enum TokenType_t {
     TOK_RET,
     TOK_LOAD,
     TOK_STORE,
+    TOK_DEBUG_PRINT_INT,
+    TOK_DEBUG_PRINT_DOUBLE,
+    TOK_DEBUG_PRINT_CHAR,
     TOK_IDENT,
     TOK_LABEL,
-    TOK_STRING,
     TOK_INTLIT,
+    TOK_STRINGLIT,
+    TOK_DOUBLELIT,
     TOK_ENTRY,
 } TokenType;
 
@@ -52,7 +60,7 @@ static void print_str(FILE* stream, const char* str, size_t len) {
 static void* xmalloc(size_t size) {
     void* ptr = malloc(size);
     if (!ptr) {
-        fprintf(stderr, "ERROR: cannot allocate memory!\n");
+        fprintf(stderr, "ERROR: cannot allocate memory\n");
         exit(EXIT_FAILURE);
     }
 
@@ -62,7 +70,7 @@ static void* xmalloc(size_t size) {
 static void* xrealloc(void* old_ptr, size_t size) {
     void* ptr = realloc(old_ptr, size);
     if (!ptr) {
-        fprintf(stderr, "ERROR: cannot reallocate memory!\n");
+        fprintf(stderr, "ERROR: cannot reallocate memory\n");
         exit(EXIT_FAILURE);
     }
 
@@ -74,31 +82,29 @@ static Token* get_tokens(const char* source, size_t* length) {
     Token* tokens = xmalloc(sizeof(Token) * cap);
 
     while (*source) {
-        // skip whitespaces.
-        while (*source && isspace(*source))
-            source++;
-
-        // skip comments.
-        if (*source == '#') {
-            while (*source && *source != '\n')
+        while (*source && isspace(*source) || *source == '#') {
+            // skip whitespaces.
+            while (*source && isspace(*source))
                 source++;
-        }
 
-        // skip whitespaces, again.
-        while (*source && isspace(*source))
-            source++;
+            // skip comments.
+            if (*source == '#') {
+                while (*source && *source != '\n')
+                    source++;
+            }
+        }
 
         const char* start = source;
 
         if (*source == 0)
             return tokens;
 
-        if (isalpha(*source)) {
+        if (isalpha(*source) || *source == '_') {
             size_t len = 0;
             do {
                 len++;
                 source++;
-            } while (*source && isalnum(*source));
+            } while (*source && (isalnum(*source) || *source == '_'));
 
             if (*source == ':') {
                 source++;
@@ -162,9 +168,9 @@ static Token* get_tokens(const char* source, size_t* length) {
                 goto reallocate;
             }
 
-            if (strncmp(start, "add", len) == 0) {
+            if (strncmp(start, "iadd", len) == 0) {
                 tokens[*length] = (Token) {
-                    .type = TOK_ADD,
+                    .type = TOK_IADD,
                     .start = start,
                     .len = len,
                 };
@@ -174,9 +180,9 @@ static Token* get_tokens(const char* source, size_t* length) {
                 goto reallocate;
             }
 
-            if (strncmp(start, "sub", len) == 0) {
+            if (strncmp(start, "fadd", len) == 0) {
                 tokens[*length] = (Token) {
-                    .type = TOK_SUB,
+                    .type = TOK_FADD,
                     .start = start,
                     .len = len,
                 };
@@ -186,9 +192,9 @@ static Token* get_tokens(const char* source, size_t* length) {
                 goto reallocate;
             }
 
-            if (strncmp(start, "mul", len) == 0) {
+            if (strncmp(start, "isub", len) == 0) {
                 tokens[*length] = (Token) {
-                    .type = TOK_MUL,
+                    .type = TOK_ISUB,
                     .start = start,
                     .len = len,
                 };
@@ -198,9 +204,57 @@ static Token* get_tokens(const char* source, size_t* length) {
                 goto reallocate;
             }
 
-            if (strncmp(start, "div", len) == 0) {
+            if (strncmp(start, "fsub", len) == 0) {
                 tokens[*length] = (Token) {
-                    .type = TOK_DIV,
+                    .type = TOK_FSUB,
+                    .start = start,
+                    .len = len,
+                };
+
+                *length += 1;
+
+                goto reallocate;
+            }
+
+            if (strncmp(start, "imul", len) == 0) {
+                tokens[*length] = (Token) {
+                    .type = TOK_IMUL,
+                    .start = start,
+                    .len = len,
+                };
+
+                *length += 1;
+
+                goto reallocate;
+            }
+
+            if (strncmp(start, "fmul", len) == 0) {
+                tokens[*length] = (Token) {
+                    .type = TOK_FMUL,
+                    .start = start,
+                    .len = len,
+                };
+
+                *length += 1;
+
+                goto reallocate;
+            }
+
+            if (strncmp(start, "idiv", len) == 0) {
+                tokens[*length] = (Token) {
+                    .type = TOK_IDIV,
+                    .start = start,
+                    .len = len,
+                };
+
+                *length += 1;
+
+                goto reallocate;
+            }
+
+            if (strncmp(start, "fdiv", len) == 0) {
+                tokens[*length] = (Token) {
+                    .type = TOK_FDIV,
                     .start = start,
                     .len = len,
                 };
@@ -318,6 +372,42 @@ static Token* get_tokens(const char* source, size_t* length) {
                 goto reallocate;
             }
 
+            if (strncmp(start, "idebug_print", len) == 0) {
+                tokens[*length] = (Token) {
+                    .type = TOK_DEBUG_PRINT_INT,
+                    .start = start,
+                    .len = len,
+                };
+
+                *length += 1;
+
+                goto reallocate;
+            }
+
+            if (strncmp(start, "fdebug_print", len) == 0) {
+                tokens[*length] = (Token) {
+                    .type = TOK_DEBUG_PRINT_DOUBLE,
+                    .start = start,
+                    .len = len,
+                };
+
+                *length += 1;
+
+                goto reallocate;
+            }
+
+            if (strncmp(start, "cdebug_print", len) == 0) {
+                tokens[*length] = (Token) {
+                    .type = TOK_DEBUG_PRINT_CHAR,
+                    .start = start,
+                    .len = len,
+                };
+
+                *length += 1;
+
+                goto reallocate;
+            }
+
             if (strncmp(start, "entry", len) == 0) {
                 tokens[*length] = (Token) {
                     .type = TOK_ENTRY,
@@ -342,14 +432,69 @@ static Token* get_tokens(const char* source, size_t* length) {
         }
 
         if (isdigit(*source)) {
+            bool is_float = false;
             size_t len = 0;
+            size_t mantissa_len = 0;
+
             do {
                 len++;
                 source++;
             } while (*source && isdigit(*source));
 
+            if (*source == '.') {
+                is_float = true;
+                len++;
+                source++;
+
+                while (*source && isdigit(*source)) {
+                    mantissa_len++;
+                    source++;
+                }
+
+                if (mantissa_len == 0) {
+                    fprintf(stderr, "ERROR: invalid floating point number\n");
+                    exit(EXIT_FAILURE);
+                }
+            }
+
+            if (is_float) {
+                tokens[*length] = (Token) {
+                    .type = TOK_DOUBLELIT,
+                    .start = start,
+                    .len = len,
+                };
+            } else {
+                tokens[*length] = (Token) {
+                    .type = TOK_INTLIT,
+                    .start = start,
+                    .len = len,
+                };
+            }
+
+            *length += 1;
+
+            goto reallocate;
+        }
+
+        if (*source == '"') {
+            source++;
+            start++;
+
+            size_t len = 0;
+            while (*source && *source != '"') {
+                len++;
+                source++;
+            }
+
+            if (*source == 0) {
+                fprintf(stderr, "ERROR: unterminated string literal\n");
+                exit(EXIT_FAILURE);
+            }
+
+            source++;
+
             tokens[*length] = (Token) {
-                .type = TOK_INTLIT,
+                .type = TOK_STRINGLIT,
                 .start = start,
                 .len = len,
             };
@@ -375,7 +520,7 @@ static size_t m_symtable_len = 0;
 
 static void symtable_insert(const char* id, size_t len, size_t rip) {
     if (m_symtable_len >= 100) {
-        fprintf(stderr, "ERROR: symbol table overflow!\n");
+        fprintf(stderr, "ERROR: symbol table overflow\n");
         exit(EXIT_FAILURE);
     }
 
@@ -417,7 +562,7 @@ MayaProgram parse_program(const char* source) {
             if (symtable_search(current_token.start, current_token.len) != -1) {
                 fprintf(stderr, "ERROR: label '");
                 print_str(stderr, current_token.start, current_token.len);
-                fprintf(stderr, "' already exists!\n");
+                fprintf(stderr, "' already exists\n");
                 exit(EXIT_FAILURE);
             }
 
@@ -469,7 +614,43 @@ MayaProgram parse_program(const char* source) {
                 goto reallocate;
             } 
 
-            if (tokens[tokens_cursor].type == TOK_STRING) {
+            if (tokens[tokens_cursor].type == TOK_DOUBLELIT) {
+                instructions[len].opcode = OP_PUSH;
+                double x = atof(tokens[tokens_cursor].start);
+                memcpy(&instructions[len].operand, &x, 8);
+
+                tokens_cursor++;
+                rip++;
+
+                goto reallocate;
+            }
+
+            if (tokens[tokens_cursor].type == TOK_STRINGLIT) {
+                for (size_t i = 0; i < tokens[tokens_cursor].len; i++) {
+                    instructions[len] = (MayaInstruction) {
+                        .opcode = OP_PUSH,
+                        .operand = tokens[tokens_cursor].start[i],
+                    };
+
+                    cap++;
+                    len++;
+                    instructions = xrealloc(instructions, sizeof(MayaInstruction) * cap);
+                    rip++;
+                }
+
+                instructions[len] = (MayaInstruction) {
+                    .opcode = OP_PUSH,
+                    .operand = 0,
+                };
+
+                cap++;
+                len++;
+                instructions = xrealloc(instructions, sizeof(MayaInstruction) * cap);
+
+                tokens_cursor++;
+                rip++;
+
+                continue;
             }
 
             fprintf(stderr, "ERROR: unexpected operand: '");
@@ -510,9 +691,9 @@ MayaProgram parse_program(const char* source) {
             exit(EXIT_FAILURE);
         }
 
-        if (current_token.type == TOK_ADD) {
+        if (current_token.type == TOK_IADD) {
             instructions[len] = (MayaInstruction) {
-                .opcode = OP_ADD,
+                .opcode = OP_IADD,
             };
 
             tokens_cursor++;
@@ -521,9 +702,9 @@ MayaProgram parse_program(const char* source) {
             goto reallocate;
         }
 
-        if (current_token.type == TOK_SUB) {
+        if (current_token.type == TOK_FADD) {
             instructions[len] = (MayaInstruction) {
-                .opcode = OP_SUB,
+                .opcode = OP_FADD,
             };
 
             tokens_cursor++;
@@ -532,9 +713,9 @@ MayaProgram parse_program(const char* source) {
             goto reallocate;
         }
 
-        if (current_token.type == TOK_MUL) {
+        if (current_token.type == TOK_ISUB) {
             instructions[len] = (MayaInstruction) {
-                .opcode = OP_MUL,
+                .opcode = OP_ISUB,
             };
 
             tokens_cursor++;
@@ -543,9 +724,53 @@ MayaProgram parse_program(const char* source) {
             goto reallocate;
         }
 
-        if (current_token.type == TOK_DIV) {
+        if (current_token.type == TOK_FSUB) {
             instructions[len] = (MayaInstruction) {
-                .opcode = OP_DIV,
+                .opcode = OP_FSUB,
+            };
+
+            tokens_cursor++;
+            rip++;
+
+            goto reallocate;
+        }
+
+        if (current_token.type == TOK_IMUL) {
+            instructions[len] = (MayaInstruction) {
+                .opcode = OP_IMUL,
+            };
+
+            tokens_cursor++;
+            rip++;
+
+            goto reallocate;
+        }
+
+        if (current_token.type == TOK_FMUL) {
+            instructions[len] = (MayaInstruction) {
+                .opcode = OP_FMUL,
+            };
+
+            tokens_cursor++;
+            rip++;
+
+            goto reallocate;
+        }
+
+        if (current_token.type == TOK_IDIV) {
+            instructions[len] = (MayaInstruction) {
+                .opcode = OP_IDIV,
+            };
+
+            tokens_cursor++;
+            rip++;
+
+            goto reallocate;
+        }
+
+        if (current_token.type == TOK_FDIV) {
+            instructions[len] = (MayaInstruction) {
+                .opcode = OP_FDIV,
             };
 
             tokens_cursor++;
@@ -841,6 +1066,39 @@ MayaProgram parse_program(const char* source) {
             exit(EXIT_FAILURE);
         }
 
+        if (current_token.type == TOK_DEBUG_PRINT_INT) {
+            instructions[len] = (MayaInstruction) {
+                .opcode = OP_DEBUG_PRINT_INT,
+            };
+
+            tokens_cursor++;
+            rip++;
+
+            goto reallocate;
+        }
+
+        if (current_token.type == TOK_DEBUG_PRINT_DOUBLE) {
+            instructions[len] = (MayaInstruction) {
+                .opcode = OP_DEBUG_PRINT_DOUBLE,
+            };
+
+            tokens_cursor++;
+            rip++;
+
+            goto reallocate;
+        }
+
+        if (current_token.type == TOK_DEBUG_PRINT_CHAR) {
+            instructions[len] = (MayaInstruction) {
+                .opcode = OP_DEBUG_PRINT_CHAR,
+            };
+
+            tokens_cursor++;
+            rip++;
+
+            goto reallocate;
+        }
+
         fprintf(stderr, "ERROR: invalid opcode '");
         print_str(stderr, current_token.start, current_token.len);
         fprintf(stderr, "'\n");
@@ -879,6 +1137,7 @@ void generate_bytecode(const char* out_file, MayaProgram program) {
         exit(EXIT_FAILURE);
     }
 
+    fwrite("MAYA", sizeof(char), 5, out_stream);
     fwrite(&program.starting_rip, sizeof(size_t), 1, out_stream);
     fwrite(&program.instructions_len, sizeof(size_t), 1, out_stream);
     fwrite(program.instructions, sizeof(MayaInstruction), program.instructions_len, out_stream);
@@ -888,25 +1147,35 @@ void generate_bytecode(const char* out_file, MayaProgram program) {
 static char instruction_to_str[256];
 
 const char* maya_instruction_to_str(MayaInstruction instruction) {
+    double actual_x = (*(double*)&instruction.operand);
+
     switch (instruction.opcode) {
     case OP_HALT:
         return "halt";
     case OP_PUSH:
-        sprintf(instruction_to_str, "push %ld", instruction.operand);
+        sprintf(instruction_to_str, "push %lf", actual_x);
         break;
     case OP_POP:
         return "pop";
     case OP_DUP:
         sprintf(instruction_to_str, "dup %ld", instruction.operand);
         break;
-    case OP_ADD:
-        return "add";
-    case OP_SUB:
-        return "sub";
-    case OP_MUL:
-        return "mul";
-    case OP_DIV:
-        return "div";
+    case OP_IADD:
+        return "iadd";
+    case OP_FADD:
+        return "fadd";
+    case OP_ISUB:
+        return "isub";
+    case OP_FSUB:
+        return "fsub";
+    case OP_IMUL:
+        return "imul";
+    case OP_FMUL:
+        return "fmul";
+    case OP_IDIV:
+        return "idiv";
+    case OP_FDIV:
+        return "fdiv";
     case OP_JMP:
         sprintf(instruction_to_str, "jmp %ld", instruction.operand);
         break;
@@ -932,6 +1201,14 @@ const char* maya_instruction_to_str(MayaInstruction instruction) {
         break;
     case OP_STORE:
         sprintf(instruction_to_str, "store %ld", instruction.operand);
+        break;
+    case OP_DEBUG_PRINT_INT:
+        return "idebug_print";
+    case OP_DEBUG_PRINT_DOUBLE:
+        return "fdebug_print";
+    case OP_DEBUG_PRINT_CHAR:
+        return "cdebug_print";
+    default:
         break;
     }
 

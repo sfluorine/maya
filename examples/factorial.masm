@@ -1,7 +1,6 @@
 entry start
 
 factorial:
-    # initial setup
     push 1
     store 0 
 
@@ -10,19 +9,24 @@ factorial:
 loop:
     load 0
     push 1
-    add
+    iadd
 
     dup 1
     store 0
 
-    mul
+    imul
 
     load 0 
-    push 20 # factorial of 20
+    push 20
 
     jneq loop
 
-    halt
+    idebug_print
+
+    ret
 
 start:
-    jmp factorial
+    push 1
+    call factorial
+
+    halt

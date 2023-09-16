@@ -21,20 +21,20 @@ static const char* maya_error_to_str(MayaError error) {
     }
 }
 
-static MayaError maya_push_stack(MayaVm* maya, int64_t value) {
+static MayaError maya_push_stack(MayaVm* maya, void* data, size_t size) {
     if (maya->sp >= MAYA_STACK_CAP)
         return ERR_STACK_OVERFLOW;
 
-    maya->stack[maya->sp++] = value;
+    memcpy(&maya->stack[maya->sp++], data, size);
     return ERR_OK;
 }
 
-static MayaError maya_pop_stack(MayaVm* maya, int64_t* output) {
+static MayaError maya_pop_stack(MayaVm* maya, void* output) {
     if (maya->sp <= 0)
         return ERR_STACK_UNDERFLOW;
 
     if (output != NULL)
-        *output = maya->stack[maya->sp - 1];
+        memcpy(output, &maya->stack[maya->sp - 1], 8);
     
     maya->sp--;
     return ERR_OK;
@@ -43,6 +43,7 @@ static MayaError maya_pop_stack(MayaVm* maya, int64_t* output) {
 static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruction) {
     MayaError error = ERR_OK;
     int64_t temps[2];
+    double ftemp;
 
     switch (instruction.opcode) {
     case OP_HALT:
@@ -50,7 +51,7 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
         maya->pc++;
         break;
     case OP_PUSH:
-        error = maya_push_stack(maya, instruction.operand);
+        error = maya_push_stack(maya, &instruction.operand, 8);
         maya->pc++;
         break;
     case OP_POP:
@@ -61,50 +62,102 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
         if (maya->sp - instruction.operand < 0)
             return ERR_STACK_UNDERFLOW;
 
-        error = maya_push_stack(maya, maya->stack[maya->sp - instruction.operand]);
+        error = maya_push_stack(maya, &maya->stack[maya->sp - instruction.operand], sizeof(int64_t));
         maya->pc++;
         break;
-    case OP_ADD:
+    case OP_IADD:
         if (maya->sp < 2)
             return ERR_STACK_UNDERFLOW;
 
         maya_pop_stack(maya, &temps[1]);
         maya_pop_stack(maya, &temps[0]);
+        temps[0] += temps[1];
 
-        maya_push_stack(maya, temps[0] + temps[1]);
+        maya_push_stack(maya, &temps[0], 8);
 
         maya->pc++;
         break;
-    case OP_SUB:
+    case OP_FADD:
         if (maya->sp < 2)
             return ERR_STACK_UNDERFLOW;
 
         maya_pop_stack(maya, &temps[1]);
         maya_pop_stack(maya, &temps[0]);
+        ftemp = (*(double*)temps) + (*(double*)&temps[1]);
 
-        maya_push_stack(maya, temps[0] - temps[1]);
+        maya_push_stack(maya, &ftemp, 8);
 
         maya->pc++;
         break;
-    case OP_MUL:
+    case OP_ISUB:
         if (maya->sp < 2)
             return ERR_STACK_UNDERFLOW;
 
         maya_pop_stack(maya, &temps[1]);
         maya_pop_stack(maya, &temps[0]);
+        temps[0] -= temps[1];
 
-        maya_push_stack(maya, temps[0] * temps[1]);
+        maya_push_stack(maya, &temps[0], 8);
 
         maya->pc++;
         break;
-    case OP_DIV:
+    case OP_FSUB:
         if (maya->sp < 2)
             return ERR_STACK_UNDERFLOW;
 
         maya_pop_stack(maya, &temps[1]);
         maya_pop_stack(maya, &temps[0]);
+        ftemp = (*(double*)temps) - (*(double*)&temps[1]);
 
-        maya_push_stack(maya, temps[0] / temps[1]);
+        maya_push_stack(maya, &ftemp, 8);
+
+        maya->pc++;
+        break;
+    case OP_IMUL:
+        if (maya->sp < 2)
+            return ERR_STACK_UNDERFLOW;
+
+        maya_pop_stack(maya, &temps[1]);
+        maya_pop_stack(maya, &temps[0]);
+        temps[0] *= temps[1];
+
+        maya_push_stack(maya, &temps[0], 8);
+
+        maya->pc++;
+        break;
+    case OP_FMUL:
+        if (maya->sp < 2)
+            return ERR_STACK_UNDERFLOW;
+
+        maya_pop_stack(maya, &temps[1]);
+        maya_pop_stack(maya, &temps[0]);
+        ftemp = (*(double*)temps) * (*(double*)&temps[1]);
+
+        maya_push_stack(maya, &ftemp, 8);
+
+        maya->pc++;
+        break;
+    case OP_IDIV:
+        if (maya->sp < 2)
+            return ERR_STACK_UNDERFLOW;
+
+        maya_pop_stack(maya, &temps[1]);
+        maya_pop_stack(maya, &temps[0]);
+        temps[0] /= temps[1];
+
+        maya_push_stack(maya, &temps[0], 8);
+
+        maya->pc++;
+        break;
+    case OP_FDIV:
+        if (maya->sp < 2)
+            return ERR_STACK_UNDERFLOW;
+
+        maya_pop_stack(maya, &temps[1]);
+        maya_pop_stack(maya, &temps[0]);
+        ftemp = (*(double*)temps) / (*(double*)&temps[1]);
+
+        maya_push_stack(maya, &ftemp, 8);
 
         maya->pc++;
         break;
@@ -168,18 +221,19 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
 
         break;
     case OP_CALL:
-        error = maya_push_stack(maya, maya->pc);
+        maya->registers[MAYA_STACK_POINTER_REG] = maya->sp - maya->stack[maya->sp - 1];
+        maya->registers[MAYA_RETURN_VALUE_REG] = maya->pc + 1;
         maya->pc = instruction.operand;
         break;
     case OP_RET:
-        error = maya_pop_stack(maya, &temps[0]);
-        maya->pc = temps[0];
+        maya->sp = maya->registers[MAYA_STACK_POINTER_REG];
+        maya->pc = maya->registers[MAYA_RETURN_VALUE_REG];
         break;
     case OP_LOAD:
         if (instruction.operand < 0 || instruction.operand >= MAYA_REGISTERS_CAP)
             return ERR_INVALID_OPERAND;
 
-        error = maya_push_stack(maya, maya->registers[instruction.operand]);
+        error = maya_push_stack(maya, &maya->registers[instruction.operand], 8);
         maya->pc++;
         break;
     case OP_STORE:
@@ -187,6 +241,35 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
             return ERR_INVALID_OPERAND;
 
         error = maya_pop_stack(maya, &maya->registers[instruction.operand]);
+        maya->pc++;
+        break;
+    case OP_DEBUG_PRINT_INT:
+        if (maya->sp < 1)
+            return ERR_STACK_UNDERFLOW;
+
+        maya_pop_stack(maya, &temps[0]);
+        printf("%ld\n", temps[0]);
+
+        maya->pc++;
+        break;
+    case OP_DEBUG_PRINT_DOUBLE:
+        if (maya->sp < 1)
+            return ERR_STACK_UNDERFLOW;
+
+        maya_pop_stack(maya, &temps[0]);
+        ftemp = (*(double*)temps);
+
+        printf("%lf\n", ftemp);
+
+        maya->pc++;
+        break;
+    case OP_DEBUG_PRINT_CHAR:
+        if (maya->sp < 1)
+            return ERR_STACK_UNDERFLOW;
+
+        maya_pop_stack(maya, &temps[0]);
+        printf("%c\n", (char)temps[0]);
+
         maya->pc++;
         break;
     default:
@@ -205,20 +288,6 @@ static void maya_init(MayaVm* maya, MayaProgram program) {
         maya->registers[i] = 0;
 
     maya->halt = false;
-}
-
-static void maya_debug_stack(MayaVm* maya) {
-    printf("STACK:\n");
-
-    for (size_t i = 0; i < maya->sp; i++)
-        printf("%ld\n", maya->stack[i]);
-}
-
-static void maya_debug_registers(MayaVm* maya) {
-    printf("REGISTERS:\n");
-
-    for (size_t i = 0; i < MAYA_REGISTERS_CAP; i++)
-        printf("%c: %ld\n", 'a' + (char)i, maya->registers[i]);
 }
 
 static void maya_execute_program(MayaVm* maya) {
@@ -402,12 +471,20 @@ int main(int argc, char** argv) {
             size_t starting_rip = 0;
             size_t instructions_len = 0;
 
+            char header[5];
+            fread(header, sizeof(char), 5, input_stream);
+
+            if (strcmp(header, "MAYA") != 0) {
+                fprintf(stderr, "ERROR: input file was not a maya bytecode\n");
+                exit(EXIT_FAILURE);
+            }
+
             fread(&starting_rip, sizeof(size_t), 1, input_stream);
             fread(&instructions_len, sizeof(size_t), 1, input_stream);
 
             MayaInstruction* instructions = malloc(sizeof(MayaInstruction) * instructions_len);
             if (!instructions){
-                fprintf(stderr, "ERROR: cannot allocate memory!\n");
+                fprintf(stderr, "ERROR: cannot allocate memory\n");
                 exit(EXIT_FAILURE);
             }
 
@@ -423,8 +500,6 @@ int main(int argc, char** argv) {
             MayaVm maya;
             maya_init(&maya, program);
             maya_execute_program(&maya);
-            maya_debug_stack(&maya);
-            maya_debug_registers(&maya);
 
             free(instructions);
 
@@ -437,7 +512,7 @@ int main(int argc, char** argv) {
             if (in_file == NULL) {
                 usage(stderr, program_name);
                 fprintf(stderr, "\n");
-                fprintf(stderr, "ERROR: no input file was provided!\n");
+                fprintf(stderr, "ERROR: no input file was provided\n");
                 exit(EXIT_FAILURE);
             }
 
@@ -455,7 +530,7 @@ int main(int argc, char** argv) {
 
             MayaInstruction* instructions = malloc(sizeof(MayaInstruction) * instructions_len);
             if (!instructions){
-                fprintf(stderr, "ERROR: cannot allocate memory!\n");
+                fprintf(stderr, "ERROR: cannot allocate memory\n");
                 exit(EXIT_FAILURE);
             }
 
@@ -477,7 +552,7 @@ int main(int argc, char** argv) {
 
         usage(stderr, program_name);
         fprintf(stderr, "\n");
-        fprintf(stderr, "ERROR: invalid argument was provided!\n");
+        fprintf(stderr, "ERROR: invalid argument was provided\n");
         exit(EXIT_FAILURE);
     }
 }
