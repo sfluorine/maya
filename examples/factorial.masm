@@ -1,5 +1,11 @@
 entry start
 
+start:
+    push 1
+    call factorial
+
+    halt
+
 factorial:
     push 1
     store 0 
@@ -24,9 +30,3 @@ loop:
     idebug_print
 
     ret
-
-start:
-    push 1
-    call factorial
-
-    halt

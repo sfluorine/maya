@@ -1,5 +1,11 @@
 entry start
 
+start:
+    push 1
+    call fibonacci
+
+    halt
+
 fibonacci:
     push 0
     push 1
@@ -26,9 +32,3 @@ loop:
     jneq loop
 
     ret
-
-start:
-    push 1
-    call fibonacci
-
-    halt

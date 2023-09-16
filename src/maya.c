@@ -497,6 +497,14 @@ int main(int argc, char** argv) {
                 return 1;
             }
 
+            char header[5];
+            fread(header, sizeof(char), 5, input_stream);
+
+            if (strcmp(header, "MAYA") != 0) {
+                fprintf(stderr, "ERROR: input file was not a maya bytecode\n");
+                exit(EXIT_FAILURE);
+            }
+
             size_t starting_rip = 0;
             size_t instructions_len = 0;
 

@@ -82,7 +82,7 @@ static Token* get_tokens(const char* source, size_t* length) {
     Token* tokens = xmalloc(sizeof(Token) * cap);
 
     while (*source) {
-        while (*source && isspace(*source) || *source == '#') {
+        while (*source && (isspace(*source) || *source == '#')) {
             // skip whitespaces.
             while (*source && isspace(*source))
                 source++;
@@ -504,7 +504,15 @@ static Token* get_tokens(const char* source, size_t* length) {
             goto reallocate;
         }
 
-        fprintf(stderr, "ERROR: unknown token '%c'\n", *source);
+        size_t len = 0;
+        do {
+            len++;
+            source++;
+        } while (*source && !isspace(*source));
+
+        fprintf(stderr, "ERROR: unknown token '");
+        print_str(stderr, start, len);
+        fprintf(stderr, "'\n");
         exit(EXIT_FAILURE);
 
     reallocate:
@@ -515,13 +523,21 @@ static Token* get_tokens(const char* source, size_t* length) {
     return tokens;
 }
 
-static SymbolTable m_symtable[100];
+static SymbolTable* m_symtable = NULL;
 static size_t m_symtable_len = 0;
+static size_t m_symtable_cap = 0;
+
+static SymbolTable* m_restable = NULL;
+static size_t m_restable_len = 0;
+static size_t m_restable_cap = 0;
 
 static void symtable_insert(const char* id, size_t len, size_t rip) {
-    if (m_symtable_len >= 100) {
-        fprintf(stderr, "ERROR: symbol table overflow\n");
-        exit(EXIT_FAILURE);
+    if (m_symtable == NULL) {
+        m_symtable_cap++;
+        m_symtable = xmalloc(sizeof(SymbolTable) * m_symtable_cap);
+    } else {
+        m_symtable_cap++;
+        m_symtable = xrealloc(m_symtable, sizeof(SymbolTable) * m_symtable_cap);
     }
 
     m_symtable[m_symtable_len++] = (SymbolTable) {
@@ -540,12 +556,70 @@ static int symtable_search(const char* id, size_t len) {
     return -1;
 }
 
+static void restable_insert(const char* id, size_t len, size_t rip) {
+    if (m_restable == NULL) {
+        m_restable_cap++;
+        m_restable = xmalloc(sizeof(SymbolTable) * m_restable_cap);
+    } else {
+        m_restable_cap++;
+        m_restable = xrealloc(m_restable, sizeof(SymbolTable) * m_restable_cap);
+    }
+
+    m_restable[m_restable_len++] = (SymbolTable) {
+        .id = id,
+        .len = len,
+        .rip = rip,
+    };
+}
+
+static int restable_search(size_t rip) {
+    for (int i = 0; i < m_symtable_len; i++) {
+        if (m_restable[i].rip == rip)
+            return i;
+    }
+
+    return -1;
+}
+
+static bool resolvable_instruction(MayaOpCode opcode) {
+    switch (opcode) {
+    case OP_JMP:
+    case OP_JEQ:
+    case OP_JNEQ:
+    case OP_JGT:
+    case OP_JLT:
+    case OP_CALL:
+        return true;
+    default:
+        return false;
+    }
+}
+
+static void resolve_symbol(MayaInstruction* instructions, size_t len) {
+    for (size_t i = 0; i < len; i++) {
+        if (resolvable_instruction(instructions[i].opcode)) {
+            int r_index = restable_search(i);
+            if (r_index == -1)
+                continue;
+
+            int s_index = symtable_search(m_restable[r_index].id, m_restable[r_index].len);
+            if (s_index == -1) {
+                fprintf(stderr, "ERROR: cannot resolve symbol '");
+                print_str(stderr, m_restable[r_index].id, m_restable[r_index].len);
+                fprintf(stderr, "'\n");
+                exit(EXIT_FAILURE);
+            }
+
+            instructions[i].operand = m_symtable[s_index].rip;
+            continue;
+        }
+    }
+}
+
 MayaProgram parse_program(const char* source) {
     size_t tokens_cursor = 0;
     size_t tokens_length = 0;
     Token* tokens = get_tokens(source, &tokens_length);
-
-    size_t rip = 0;
 
     size_t cap = 1;
     size_t len = 0;
@@ -566,7 +640,7 @@ MayaProgram parse_program(const char* source) {
                 exit(EXIT_FAILURE);
             }
 
-            symtable_insert(current_token.start, current_token.len, rip);
+            symtable_insert(current_token.start, current_token.len, len);
             tokens_cursor++;
             continue;
         }
@@ -594,8 +668,6 @@ MayaProgram parse_program(const char* source) {
             };
 
             tokens_cursor++;
-            rip++;
-
             goto reallocate;
         }
 
@@ -609,8 +681,6 @@ MayaProgram parse_program(const char* source) {
                 };
 
                 tokens_cursor++;
-                rip++;
-
                 goto reallocate;
             } 
 
@@ -620,8 +690,6 @@ MayaProgram parse_program(const char* source) {
                 memcpy(&instructions[len].operand, &x, 8);
 
                 tokens_cursor++;
-                rip++;
-
                 goto reallocate;
             }
 
@@ -635,7 +703,6 @@ MayaProgram parse_program(const char* source) {
                     cap++;
                     len++;
                     instructions = xrealloc(instructions, sizeof(MayaInstruction) * cap);
-                    rip++;
                 }
 
                 instructions[len] = (MayaInstruction) {
@@ -648,8 +715,6 @@ MayaProgram parse_program(const char* source) {
                 instructions = xrealloc(instructions, sizeof(MayaInstruction) * cap);
 
                 tokens_cursor++;
-                rip++;
-
                 continue;
             }
 
@@ -665,8 +730,6 @@ MayaProgram parse_program(const char* source) {
             };
 
             tokens_cursor++;
-            rip++;
-
             goto reallocate;
         }
 
@@ -680,8 +743,6 @@ MayaProgram parse_program(const char* source) {
                 };
 
                 tokens_cursor++;
-                rip++;
-
                 goto reallocate;
             } 
 
@@ -697,8 +758,6 @@ MayaProgram parse_program(const char* source) {
             };
 
             tokens_cursor++;
-            rip++;
-
             goto reallocate;
         }
 
@@ -708,8 +767,6 @@ MayaProgram parse_program(const char* source) {
             };
 
             tokens_cursor++;
-            rip++;
-
             goto reallocate;
         }
 
@@ -719,8 +776,6 @@ MayaProgram parse_program(const char* source) {
             };
 
             tokens_cursor++;
-            rip++;
-
             goto reallocate;
         }
 
@@ -730,8 +785,6 @@ MayaProgram parse_program(const char* source) {
             };
 
             tokens_cursor++;
-            rip++;
-
             goto reallocate;
         }
 
@@ -741,8 +794,6 @@ MayaProgram parse_program(const char* source) {
             };
 
             tokens_cursor++;
-            rip++;
-
             goto reallocate;
         }
 
@@ -752,8 +803,6 @@ MayaProgram parse_program(const char* source) {
             };
 
             tokens_cursor++;
-            rip++;
-
             goto reallocate;
         }
 
@@ -763,8 +812,6 @@ MayaProgram parse_program(const char* source) {
             };
 
             tokens_cursor++;
-            rip++;
-
             goto reallocate;
         }
 
@@ -774,8 +821,6 @@ MayaProgram parse_program(const char* source) {
             };
 
             tokens_cursor++;
-            rip++;
-
             goto reallocate;
         }
 
@@ -789,28 +834,17 @@ MayaProgram parse_program(const char* source) {
                 };
 
                 tokens_cursor++;
-                rip++;
-
                 goto reallocate;
             } 
 
             if (tokens[tokens_cursor].type == TOK_IDENT) {
-                int index = symtable_search(tokens[tokens_cursor].start, tokens[tokens_cursor].len);
-                if (index == -1) {
-                    fprintf(stderr, "ERROR: no such label '");
-                    print_str(stderr, tokens[tokens_cursor].start, tokens[tokens_cursor].len);
-                    fprintf(stderr, "'\n");
-                    exit(EXIT_FAILURE);
-                }
+                restable_insert(tokens[tokens_cursor].start, tokens[tokens_cursor].len, len);
 
                 instructions[len] = (MayaInstruction) {
                     .opcode = OP_JMP,
-                    .operand = m_symtable[index].rip,
                 };
 
                 tokens_cursor++;
-                rip++;
-
                 goto reallocate;
             }
 
@@ -830,28 +864,17 @@ MayaProgram parse_program(const char* source) {
                 };
 
                 tokens_cursor++;
-                rip++;
-
                 goto reallocate;
             } 
 
             if (tokens[tokens_cursor].type == TOK_IDENT) {
-                int index = symtable_search(tokens[tokens_cursor].start, tokens[tokens_cursor].len);
-                if (index == -1) {
-                    fprintf(stderr, "ERROR: no such label '");
-                    print_str(stderr, tokens[tokens_cursor].start, tokens[tokens_cursor].len);
-                    fprintf(stderr, "'\n");
-                    exit(EXIT_FAILURE);
-                }
+                restable_insert(tokens[tokens_cursor].start, tokens[tokens_cursor].len, len);
 
                 instructions[len] = (MayaInstruction) {
                     .opcode = OP_JEQ,
-                    .operand = m_symtable[index].rip,
                 };
 
                 tokens_cursor++;
-                rip++;
-
                 goto reallocate;
             }
 
@@ -871,28 +894,17 @@ MayaProgram parse_program(const char* source) {
                 };
 
                 tokens_cursor++;
-                rip++;
-
                 goto reallocate;
             } 
 
             if (tokens[tokens_cursor].type == TOK_IDENT) {
-                int index = symtable_search(tokens[tokens_cursor].start, tokens[tokens_cursor].len);
-                if (index == -1) {
-                    fprintf(stderr, "ERROR: no such label '");
-                    print_str(stderr, tokens[tokens_cursor].start, tokens[tokens_cursor].len);
-                    fprintf(stderr, "'\n");
-                    exit(EXIT_FAILURE);
-                }
+                restable_insert(tokens[tokens_cursor].start, tokens[tokens_cursor].len, len);
 
                 instructions[len] = (MayaInstruction) {
                     .opcode = OP_JNEQ,
-                    .operand = m_symtable[index].rip,
                 };
 
                 tokens_cursor++;
-                rip++;
-
                 goto reallocate;
             }
 
@@ -912,28 +924,17 @@ MayaProgram parse_program(const char* source) {
                 };
 
                 tokens_cursor++;
-                rip++;
-
                 goto reallocate;
             } 
 
             if (tokens[tokens_cursor].type == TOK_IDENT) {
-                int index = symtable_search(tokens[tokens_cursor].start, tokens[tokens_cursor].len);
-                if (index == -1) {
-                    fprintf(stderr, "ERROR: no such label '");
-                    print_str(stderr, tokens[tokens_cursor].start, tokens[tokens_cursor].len);
-                    fprintf(stderr, "'\n");
-                    exit(EXIT_FAILURE);
-                }
+                restable_insert(tokens[tokens_cursor].start, tokens[tokens_cursor].len, len);
 
                 instructions[len] = (MayaInstruction) {
                     .opcode = OP_JGT,
-                    .operand = m_symtable[index].rip,
                 };
 
                 tokens_cursor++;
-                rip++;
-
                 goto reallocate;
             }
 
@@ -953,28 +954,17 @@ MayaProgram parse_program(const char* source) {
                 };
 
                 tokens_cursor++;
-                rip++;
-
                 goto reallocate;
             } 
 
             if (tokens[tokens_cursor].type == TOK_IDENT) {
-                int index = symtable_search(tokens[tokens_cursor].start, tokens[tokens_cursor].len);
-                if (index == -1) {
-                    fprintf(stderr, "ERROR: no such label '");
-                    print_str(stderr, tokens[tokens_cursor].start, tokens[tokens_cursor].len);
-                    fprintf(stderr, "'\n");
-                    exit(EXIT_FAILURE);
-                }
+                restable_insert(tokens[tokens_cursor].start, tokens[tokens_cursor].len, len);
 
                 instructions[len] = (MayaInstruction) {
                     .opcode = OP_JLT,
-                    .operand = m_symtable[index].rip,
                 };
 
                 tokens_cursor++;
-                rip++;
-
                 goto reallocate;
             }
 
@@ -988,22 +978,13 @@ MayaProgram parse_program(const char* source) {
             tokens_cursor++;
 
             if (tokens[tokens_cursor].type == TOK_IDENT) {
-                int index = symtable_search(tokens[tokens_cursor].start, tokens[tokens_cursor].len);
-                if (index == -1) {
-                    fprintf(stderr, "ERROR: no such label '");
-                    print_str(stderr, tokens[tokens_cursor].start, tokens[tokens_cursor].len);
-                    fprintf(stderr, "'\n");
-                    exit(EXIT_FAILURE);
-                }
+                restable_insert(tokens[tokens_cursor].start, tokens[tokens_cursor].len, len);
 
                 instructions[len] = (MayaInstruction) {
                     .opcode = OP_CALL,
-                    .operand = m_symtable[index].rip,
                 };
 
                 tokens_cursor++;
-                rip++;
-
                 goto reallocate;
             }
 
@@ -1019,8 +1000,6 @@ MayaProgram parse_program(const char* source) {
             };
 
             tokens_cursor++;
-            rip++;
-
             goto reallocate;
         }
 
@@ -1034,8 +1013,6 @@ MayaProgram parse_program(const char* source) {
                 };
 
                 tokens_cursor++;
-                rip++;
-
                 goto reallocate;
             } 
 
@@ -1055,8 +1032,6 @@ MayaProgram parse_program(const char* source) {
                 };
 
                 tokens_cursor++;
-                rip++;
-
                 goto reallocate;
             } 
 
@@ -1072,8 +1047,6 @@ MayaProgram parse_program(const char* source) {
             };
 
             tokens_cursor++;
-            rip++;
-
             goto reallocate;
         }
 
@@ -1083,8 +1056,6 @@ MayaProgram parse_program(const char* source) {
             };
 
             tokens_cursor++;
-            rip++;
-
             goto reallocate;
         }
 
@@ -1094,8 +1065,6 @@ MayaProgram parse_program(const char* source) {
             };
 
             tokens_cursor++;
-            rip++;
-
             goto reallocate;
         }
 
@@ -1122,7 +1091,16 @@ MayaProgram parse_program(const char* source) {
         starting_rip = m_symtable[index].rip;
     }
 
+    resolve_symbol(instructions, len);
+
+    if (m_symtable != NULL)
+        free(m_symtable);
+
+    if (m_restable != NULL)
+        free(m_restable);
+
     free(tokens);
+
     return (MayaProgram) {
         .instructions_len = len,
         .starting_rip = starting_rip,
@@ -1209,7 +1187,7 @@ const char* maya_instruction_to_str(MayaInstruction instruction) {
     case OP_DEBUG_PRINT_CHAR:
         return "cdebug_print";
     default:
-        break;
+        return "invalid instruction";
     }
 
     return instruction_to_str;
