@@ -19,3 +19,9 @@ To execute the factorial example program:
 $ ./build/maya -a example/factorial.masm factorial.maya
 $ ./build/maya -e factorial.maya
 ```
+
+Or in one command
+
+```console
+$ ./build/maya -a example/factorial.masm factorial.maya -e factorial./maya
+```
