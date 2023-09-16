@@ -18,6 +18,8 @@ static const char* maya_error_to_str(MayaError error) {
         return "INVALID OPERAND";
     case ERR_INVALID_INSTRUCTION:
         return "INVALID INSTRUCTION";
+    default:
+        return "UNKNOWN ERROR";
     }
 }
 
@@ -62,7 +64,7 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
         if (maya->sp - instruction.operand < 0)
             return ERR_STACK_UNDERFLOW;
 
-        error = maya_push_stack(maya, &maya->stack[maya->sp - instruction.operand], sizeof(int64_t));
+        error = maya_push_stack(maya, &maya->stack[maya->sp - instruction.operand], 8);
         maya->pc++;
         break;
     case OP_IADD:
@@ -298,33 +300,6 @@ static void maya_execute_program(MayaVm* maya) {
             return;
         }
     }
-}
-
-static MayaInstruction* maya_load_program_from_file(const char* input_file) {
-    FILE* input_stream = fopen(input_file, "rb");
-    if (!input_stream) {
-        fprintf(stderr, "ERROR: cannot open file '%s'\n", input_file);
-        exit(EXIT_FAILURE);
-    }
-
-    fseek(input_stream, 0, SEEK_END);
-    long size = ftell(input_stream) / sizeof(MayaInstruction);
-    fseek(input_stream, 0, SEEK_SET);
-
-    MayaInstruction* instruction = malloc(sizeof(MayaInstruction) * size);
-    if (!instruction) {
-        fprintf(stderr, "ERROR: cannot allocate memory!\n");
-        exit(EXIT_FAILURE);
-    }
-
-    fread(instruction, sizeof(MayaInstruction), size, input_stream);
-    if (ferror(input_stream)) {
-        fprintf(stderr, "ERROR: error while reading file: %s\n", strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-
-    fclose(input_stream);
-    return instruction;
 }
 
 static char* shift(int* argc, char*** argv) {
