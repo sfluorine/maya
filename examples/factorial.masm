@@ -1,23 +1,28 @@
-# initial setup
-push 1
-store 0 
+entry start
 
-push 1
+factorial:
+    # initial setup
+    push 1
+    store 0 
+
+    push 1
 
 loop:
+    load 0
+    push 1
+    add
 
-load 0
-push 1
-add
+    dup 1
+    store 0
 
-dup 1
-store 0
+    mul
 
-mul
+    load 0 
+    push 20 # factorial of 20
 
-load 0 
-push 20 # factorial of 20
+    jneq loop
 
-jneq loop
+    halt
 
-halt
+start:
+    jmp factorial

@@ -48,3 +48,12 @@ typedef struct MayaVm_t {
     int64_t registers[MAYA_REGISTERS_CAP];
     bool halt;
 } MayaVm;
+
+typedef struct MayaProgram_t {
+    size_t starting_rip;
+    size_t instructions_len;
+    MayaInstruction* instructions;
+} MayaProgram;
+
+MayaProgram parse_program(const char* source);
+void generate_bytecode(const char* out_file, MayaProgram program);

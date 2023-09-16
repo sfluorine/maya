@@ -29,6 +29,7 @@ typedef enum TokenType_t {
     TOK_LABEL,
     TOK_STRING,
     TOK_INTLIT,
+    TOK_ENTRY,
 } TokenType;
 
 typedef struct Token_t {
@@ -317,6 +318,18 @@ static Token* get_tokens(const char* source, size_t* length) {
                 goto reallocate;
             }
 
+            if (strncmp(start, "entry", len) == 0) {
+                tokens[*length] = (Token) {
+                    .type = TOK_ENTRY,
+                    .start = start,
+                    .len = len,
+                };
+
+                *length += 1;
+
+                goto reallocate;
+            }
+
             tokens[*length] = (Token) {
                 .type = TOK_IDENT,
                 .start = start,
@@ -382,7 +395,7 @@ static int symtable_search(const char* id, size_t len) {
     return -1;
 }
 
-static MayaInstruction* parse_instructions(const char* source, size_t* out_len) {
+MayaProgram parse_program(const char* source) {
     size_t tokens_cursor = 0;
     size_t tokens_length = 0;
     Token* tokens = get_tokens(source, &tokens_length);
@@ -392,6 +405,10 @@ static MayaInstruction* parse_instructions(const char* source, size_t* out_len) 
     size_t cap = 1;
     size_t len = 0;
     MayaInstruction* instructions = xmalloc(sizeof(MayaInstruction) * cap);
+
+    const char* entry = NULL;
+    size_t entry_len = 0;
+    size_t starting_rip = 0;
 
     while (tokens_cursor < tokens_length) {
         Token current_token = tokens[tokens_cursor];
@@ -407,6 +424,23 @@ static MayaInstruction* parse_instructions(const char* source, size_t* out_len) 
             symtable_insert(current_token.start, current_token.len, rip);
             tokens_cursor++;
             continue;
+        }
+
+        if (current_token.type == TOK_ENTRY) {
+            tokens_cursor++;
+
+            if (tokens[tokens_cursor].type == TOK_IDENT) {
+                entry = tokens[tokens_cursor].start;
+                entry_len = tokens[tokens_cursor].len;
+
+                tokens_cursor++;
+                continue;
+            }
+
+            fprintf(stderr, "ERROR: unexpected operand: '");
+            print_str(stderr, tokens[tokens_cursor].start, tokens[tokens_cursor].len);
+            fprintf(stderr, "'\n");
+            exit(EXIT_FAILURE);
         }
 
         if (current_token.type == TOK_HALT) {
@@ -818,91 +852,35 @@ static MayaInstruction* parse_instructions(const char* source, size_t* out_len) 
         instructions = xrealloc(instructions, sizeof(MayaInstruction) * cap);
     }
 
-    *out_len = len;
+    if (entry != NULL) {
+        int index = symtable_search(entry, entry_len);
+        if (index == -1) {
+            fprintf(stderr, "ERROR: no such label '");
+            print_str(stderr, entry, entry_len);
+            fprintf(stderr, "' to set the entry\n");
+            exit(EXIT_FAILURE);
+        }
+
+        starting_rip = m_symtable[index].rip;
+    }
 
     free(tokens);
-    return instructions;
+    return (MayaProgram) {
+        .instructions_len = len,
+        .starting_rip = starting_rip,
+        .instructions = instructions,
+    };
 }
 
-static void generate_bytecode(const char* out_file, MayaInstruction* instructions, size_t len) {
+void generate_bytecode(const char* out_file, MayaProgram program) {
     FILE* out_stream = fopen(out_file, "wb");
     if (!out_stream) {
         fprintf(stderr, "ERROR: cannot open file '%s'\n", out_file);
         exit(EXIT_FAILURE);
     }
 
-    fwrite(instructions, sizeof(MayaInstruction), len, out_stream);
+    fwrite(&program.starting_rip, sizeof(size_t), 1, out_stream);
+    fwrite(&program.instructions_len, sizeof(size_t), 1, out_stream);
+    fwrite(program.instructions, sizeof(MayaInstruction), program.instructions_len, out_stream);
     fclose(out_stream);
-}
-
-static char* shift(int* argc, char*** argv) {
-    if (*argc == 0)
-        return NULL;
-
-    char* arg = *argv[0];
-    *argv += 1;
-    *argc -= 1;
-
-    return arg;
-}
-
-static void usage(const char* program) {
-    fprintf(stderr, "Usage: %s <input_file.masm> <out_file.maya> \n", program);
-}
-
-int main(int argc, char** argv) {
-    const char* program = shift(&argc, &argv);
-
-    if (argc == 0) {
-        usage(program);
-        fprintf(stderr, "ERROR: expected input file!\n");
-        return 1;
-    }
-
-    const char* input_file = shift(&argc, &argv);
-
-    if (argc == 0) {
-        usage(program);
-        fprintf(stderr, "ERROR: expected output file!\n");
-        return 1;
-    }
-
-    const char* output_file = shift(&argc, &argv);
-
-    FILE* input_stream = fopen(input_file, "r");
-    if (!input_stream) {
-        fprintf(stderr, "ERROR: cannot open file '%s': %s\n", input_file, strerror(errno));
-        return 1;
-    }
-
-    fseek(input_stream, 0, SEEK_END);
-    long file_size = ftell(input_stream);
-    fseek(input_stream, 0, SEEK_SET);
-
-    if (file_size == 0) {
-        fprintf(stderr, "ERROR: reading empty file!\n");
-        fclose(input_stream);
-        return 1;
-    }
-
-    char* buffer = malloc(sizeof(char) * file_size + 1);
-    fread(buffer, sizeof(char), (size_t)file_size, input_stream);
-
-    if (ferror(input_stream)) {
-        fprintf(stderr, "ERROR: error while reading file: %s\n", strerror(errno));
-        free(buffer);
-        fclose(input_stream);
-        return 1;
-    }
-
-    fclose(input_stream);
-    buffer[file_size] = 0;
-
-    size_t instructions_len = 0;
-    MayaInstruction* instructions = parse_instructions(buffer, &instructions_len);
-
-    generate_bytecode(output_file, instructions, instructions_len);
-
-    free(instructions);
-    free(buffer);
 }

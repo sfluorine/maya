@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <stdbool.h>
 
 #include "maya.h"
 
@@ -195,10 +196,10 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
     return error;
 }
 
-static void maya_init(MayaVm* maya, MayaInstruction* program) {
-    maya->pc = 0;
+static void maya_init(MayaVm* maya, MayaProgram program) {
+    maya->pc = program.starting_rip;
     maya->sp = 0;
-    maya->program = program;
+    maya->program = program.instructions;
 
     for (size_t i = 0; i < MAYA_REGISTERS_CAP; i++)
         maya->registers[i] = 0;
@@ -268,28 +269,171 @@ static char* shift(int* argc, char*** argv) {
     return arg;
 }
 
-static void usage(const char* program) {
-    fprintf(stderr, "Usage: %s <input_file.maya>\n", program);
+static void usage(FILE* stream, const char* program_name) {
+    fprintf(stream, "usage: %s [options]\n", program_name);
+    fprintf(stream, "\n");
+    fprintf(stream, "options:\n");
+    fprintf(stream, "  -h                                   show usage.\n");
+    fprintf(stream, "  -a <input.masm> [output.maya]        assemble mayasm file.\n");
+    fprintf(stream, "  -e <input.maya>                      execute maya file.\n");
+}
+
+static const char* get_actual_filename(const char* filepath) {
+    const char* start_ptr = filepath;
+
+    while (*filepath)
+        filepath++;
+
+    while (*filepath != '/' && filepath != start_ptr)
+        filepath--;
+
+    if (*filepath == '/')
+        filepath++;
+
+    return filepath;
 }
 
 int main(int argc, char** argv) {
     const char* program_name = shift(&argc, &argv);
 
     if (argc == 0) {
-        usage(program_name);
-        fprintf(stderr, "ERROR: expected input file!\n");
-        return 1;
+        usage(stderr, program_name);
+        exit(EXIT_FAILURE);
     }
 
-    const char* input_file = shift(&argc, &argv);
-    MayaInstruction* program = maya_load_program_from_file(input_file);
+    bool success = false;
 
-    MayaVm maya;
-    maya_init(&maya, program);
-    maya_execute_program(&maya);
+    while (argc != 0) {
+        const char* option = shift(&argc, &argv);
 
-    free(program);
+        if (strcmp(option, "-h") == 0) {
+            if (!success) {
+                usage(stdout, program_name);
+                exit(EXIT_SUCCESS);
+            }
 
-    maya_debug_stack(&maya);
-    maya_debug_registers(&maya);
+            fprintf(stderr, "WARNING: ignoring the -h flag\n");
+            continue;
+        }
+
+        if (strcmp(option, "-a") == 0) {
+            char out_file[256];
+            char* out_file_ptr = out_file;
+
+            const char* in_file = shift(&argc, &argv);
+            if (in_file == NULL) {
+                usage(stderr, program_name);
+                fprintf(stderr, "\n");
+                fprintf(stderr, "ERROR: no input file was provided!\n");
+                exit(EXIT_FAILURE);
+            }
+
+            const char* actual_out_file = shift(&argc, &argv);
+
+            if (actual_out_file == NULL) {
+                strcpy(out_file, get_actual_filename(in_file));
+
+                while (*out_file_ptr && *out_file_ptr != '.')
+                    out_file_ptr++;
+
+                if (*out_file_ptr != 0)
+                    *out_file_ptr = 0;
+
+                strcat(out_file, ".maya");
+            } else {
+                strcpy(out_file, actual_out_file);
+            }
+
+            FILE* input_stream = fopen(in_file, "r");
+            if (!input_stream) {
+                fprintf(stderr, "ERROR: cannot open file '%s': %s\n", in_file, strerror(errno));
+                return 1;
+            }
+
+            fseek(input_stream, 0, SEEK_END);
+            long file_size = ftell(input_stream);
+            fseek(input_stream, 0, SEEK_SET);
+
+            if (file_size == 0) {
+                fprintf(stderr, "ERROR: reading empty file!\n");
+                fclose(input_stream);
+                return 1;
+            }
+
+            char* buffer = malloc(sizeof(char) * file_size + 1);
+            fread(buffer, sizeof(char), (size_t)file_size, input_stream);
+
+            if (ferror(input_stream)) {
+                fprintf(stderr, "ERROR: error while reading file: %s\n", strerror(errno));
+                free(buffer);
+                fclose(input_stream);
+                return 1;
+            }
+
+            fclose(input_stream);
+            buffer[file_size] = 0;
+
+            MayaProgram program = parse_program(buffer);
+            generate_bytecode(out_file, program);
+
+            free(program.instructions);
+            free(buffer);
+
+            success = true;
+            continue;
+        }
+
+        if (strcmp(option, "-e") == 0) {
+            const char* in_file = shift(&argc, &argv);
+            if (in_file == NULL) {
+                usage(stderr, program_name);
+                fprintf(stderr, "\n");
+                fprintf(stderr, "ERROR: no input file was provided!\n");
+                exit(EXIT_FAILURE);
+            }
+
+            FILE* input_stream = fopen(in_file, "rb");
+            if (!input_stream) {
+                fprintf(stderr, "ERROR: cannot open file '%s': %s\n", in_file, strerror(errno));
+                return 1;
+            }
+
+            size_t starting_rip = 0;
+            size_t instructions_len = 0;
+
+            fread(&starting_rip, sizeof(size_t), 1, input_stream);
+            fread(&instructions_len, sizeof(size_t), 1, input_stream);
+
+            MayaInstruction* instructions = malloc(sizeof(MayaInstruction) * instructions_len);
+            if (!instructions){
+                fprintf(stderr, "ERROR: cannot allocate memory!\n");
+                exit(EXIT_FAILURE);
+            }
+
+            fread(instructions, sizeof(MayaInstruction), instructions_len, input_stream);
+            fclose(input_stream);
+
+            MayaProgram program = {
+                .starting_rip = starting_rip,
+                .instructions_len = instructions_len,
+                .instructions = instructions,
+            };
+
+            MayaVm maya;
+            maya_init(&maya, program);
+            maya_execute_program(&maya);
+            maya_debug_stack(&maya);
+            maya_debug_registers(&maya);
+
+            free(instructions);
+
+            success = true;
+            continue;
+        }
+
+        usage(stderr, program_name);
+        fprintf(stderr, "\n");
+        fprintf(stderr, "ERROR: invalid argument was provided!\n");
+        exit(EXIT_FAILURE);
+    }
 }

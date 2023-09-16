@@ -1,4 +1,7 @@
+entry start
+
 fibonacci:
+    # initial setup
     push 0
     push 1
     push 0
@@ -20,3 +23,6 @@ loop:
     jneq loop
 
     halt
+
+start:
+    jmp fibonacci
