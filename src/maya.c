@@ -276,6 +276,7 @@ static void usage(FILE* stream, const char* program_name) {
     fprintf(stream, "  -h                                   show usage.\n");
     fprintf(stream, "  -a <input.masm> [output.maya]        assemble mayasm file.\n");
     fprintf(stream, "  -e <input.maya>                      execute maya file.\n");
+    fprintf(stream, "  -d <input.maya>                      disassemble maya file.\n");
 }
 
 static const char* get_actual_filename(const char* filepath) {
@@ -424,6 +425,49 @@ int main(int argc, char** argv) {
             maya_execute_program(&maya);
             maya_debug_stack(&maya);
             maya_debug_registers(&maya);
+
+            free(instructions);
+
+            success = true;
+            continue;
+        }
+
+        if (strcmp(option, "-d") == 0) {
+            const char* in_file = shift(&argc, &argv);
+            if (in_file == NULL) {
+                usage(stderr, program_name);
+                fprintf(stderr, "\n");
+                fprintf(stderr, "ERROR: no input file was provided!\n");
+                exit(EXIT_FAILURE);
+            }
+
+            FILE* input_stream = fopen(in_file, "rb");
+            if (!input_stream) {
+                fprintf(stderr, "ERROR: cannot open file '%s': %s\n", in_file, strerror(errno));
+                return 1;
+            }
+
+            size_t starting_rip = 0;
+            size_t instructions_len = 0;
+
+            fread(&starting_rip, sizeof(size_t), 1, input_stream);
+            fread(&instructions_len, sizeof(size_t), 1, input_stream);
+
+            MayaInstruction* instructions = malloc(sizeof(MayaInstruction) * instructions_len);
+            if (!instructions){
+                fprintf(stderr, "ERROR: cannot allocate memory!\n");
+                exit(EXIT_FAILURE);
+            }
+
+            fread(instructions, sizeof(MayaInstruction), instructions_len, input_stream);
+            fclose(input_stream);
+
+            printf("starting rip: %zu\n", starting_rip);
+            printf("instructions length: %zu\n", instructions_len);
+            printf("\n");
+
+            for (size_t i = 0; i < instructions_len; i++)
+                printf("%s\n", maya_instruction_to_str(instructions[i]));
 
             free(instructions);
 

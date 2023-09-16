@@ -57,3 +57,4 @@ typedef struct MayaProgram_t {
 
 MayaProgram parse_program(const char* source);
 void generate_bytecode(const char* out_file, MayaProgram program);
+const char* maya_instruction_to_str(MayaInstruction instructions);

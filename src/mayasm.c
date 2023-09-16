@@ -884,3 +884,56 @@ void generate_bytecode(const char* out_file, MayaProgram program) {
     fwrite(program.instructions, sizeof(MayaInstruction), program.instructions_len, out_stream);
     fclose(out_stream);
 }
+
+static char instruction_to_str[256];
+
+const char* maya_instruction_to_str(MayaInstruction instruction) {
+    switch (instruction.opcode) {
+    case OP_HALT:
+        return "halt";
+    case OP_PUSH:
+        sprintf(instruction_to_str, "push %ld", instruction.operand);
+        break;
+    case OP_POP:
+        return "pop";
+    case OP_DUP:
+        sprintf(instruction_to_str, "dup %ld", instruction.operand);
+        break;
+    case OP_ADD:
+        return "add";
+    case OP_SUB:
+        return "sub";
+    case OP_MUL:
+        return "mul";
+    case OP_DIV:
+        return "div";
+    case OP_JMP:
+        sprintf(instruction_to_str, "jmp %ld", instruction.operand);
+        break;
+    case OP_JEQ:
+        sprintf(instruction_to_str, "jeq %ld", instruction.operand);
+        break;
+    case OP_JNEQ:
+        sprintf(instruction_to_str, "jneq %ld", instruction.operand);
+        break;
+    case OP_JGT:
+        sprintf(instruction_to_str, "jgt %ld", instruction.operand);
+        break;
+    case OP_JLT:
+        sprintf(instruction_to_str, "jlt %ld", instruction.operand);
+        break;
+    case OP_CALL:
+        sprintf(instruction_to_str, "call %ld", instruction.operand);
+        break;
+    case OP_RET:
+        return "ret";
+    case OP_LOAD:
+        sprintf(instruction_to_str, "load %ld", instruction.operand);
+        break;
+    case OP_STORE:
+        sprintf(instruction_to_str, "store %ld", instruction.operand);
+        break;
+    }
+
+    return instruction_to_str;
+}
