@@ -1276,11 +1276,19 @@ MayaProgram parse_program(const char* source) {
 
     resolve_symbol(instructions, len);
 
-    if (m_symtable != NULL)
+    if (m_symtable != NULL) {
+        m_symtable_cap = 0;
+        m_symtable_len = 0;
         free(m_symtable);
+        m_symtable = NULL;
+    }
 
-    if (m_restable != NULL)
+    if (m_restable != NULL) {
+        m_restable_cap = 0;
+        m_restable_len = 0;
         free(m_restable);
+        m_restable = NULL;
+    }
 
     free(tokens);
 

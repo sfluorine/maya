@@ -1,5 +1,7 @@
 entry start
 
+# this assembly support comments btw.
+
 start:
     push 1
     call factorial

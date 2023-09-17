@@ -7,6 +7,8 @@ start:
     halt
 
 fibonacci:
+    # setup
+
     push 0
     push 1
 
@@ -29,6 +31,6 @@ loop:
     load 0
     push 60
 
-    jneq loop
+    ijneq loop
 
     ret
