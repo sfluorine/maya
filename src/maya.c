@@ -18,25 +18,27 @@ static const char* maya_error_to_str(MayaError error) {
         return "INVALID OPERAND";
     case ERR_INVALID_INSTRUCTION:
         return "INVALID INSTRUCTION";
+    case ERR_DIV_BY_ZERO:
+        return "DIVIDE BY ZERO";
     default:
         return "UNKNOWN ERROR";
     }
 }
 
-static MayaError maya_push_stack(MayaVm* maya, void* data, size_t size) {
+static MayaError maya_push_stack(MayaVm* maya, Frame frame) {
     if (maya->sp >= MAYA_STACK_CAP)
         return ERR_STACK_OVERFLOW;
 
-    memcpy(&maya->stack[maya->sp++], data, size);
+    maya->stack[maya->sp++] = frame;
     return ERR_OK;
 }
 
-static MayaError maya_pop_stack(MayaVm* maya, void* output) {
+static MayaError maya_pop_stack(MayaVm* maya, Frame* output) {
     if (maya->sp <= 0)
         return ERR_STACK_UNDERFLOW;
 
     if (output != NULL)
-        memcpy(output, &maya->stack[maya->sp - 1], 8);
+        *output = maya->stack[maya->sp - 1];
     
     maya->sp--;
     return ERR_OK;
@@ -44,8 +46,7 @@ static MayaError maya_pop_stack(MayaVm* maya, void* output) {
 
 static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruction) {
     MayaError error = ERR_OK;
-    int64_t temps[2];
-    double ftemp;
+    Frame temps[2];
 
     switch (instruction.opcode) {
     case OP_HALT:
@@ -53,7 +54,7 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
         maya->pc++;
         break;
     case OP_PUSH:
-        error = maya_push_stack(maya, &instruction.operand, 8);
+        error = maya_push_stack(maya, instruction.operand);
         maya->pc++;
         break;
     case OP_POP:
@@ -61,10 +62,10 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
         maya->pc++;
         break;
     case OP_DUP:
-        if (maya->sp - instruction.operand < 0)
+        if (maya->sp - instruction.operand.as_i64 < 0)
             return ERR_STACK_UNDERFLOW;
 
-        error = maya_push_stack(maya, &maya->stack[maya->sp - instruction.operand], 8);
+        error = maya_push_stack(maya, maya->stack[maya->sp - instruction.operand.as_i64]);
         maya->pc++;
         break;
     case OP_IADD:
@@ -73,9 +74,9 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
 
         maya_pop_stack(maya, &temps[1]);
         maya_pop_stack(maya, &temps[0]);
-        temps[0] += temps[1];
+        temps[0].as_i64 += temps[1].as_i64;
 
-        maya_push_stack(maya, &temps[0], 8);
+        maya_push_stack(maya, temps[0]);
 
         maya->pc++;
         break;
@@ -85,9 +86,9 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
 
         maya_pop_stack(maya, &temps[1]);
         maya_pop_stack(maya, &temps[0]);
-        ftemp = (*(double*)temps) + (*(double*)&temps[1]);
+        temps[0].as_f64 += temps[1].as_f64;
 
-        maya_push_stack(maya, &ftemp, 8);
+        maya_push_stack(maya, temps[0]);
 
         maya->pc++;
         break;
@@ -97,9 +98,9 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
 
         maya_pop_stack(maya, &temps[1]);
         maya_pop_stack(maya, &temps[0]);
-        temps[0] -= temps[1];
+        temps[0].as_i64 -= temps[1].as_i64;
 
-        maya_push_stack(maya, &temps[0], 8);
+        maya_push_stack(maya, temps[0]);
 
         maya->pc++;
         break;
@@ -109,9 +110,9 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
 
         maya_pop_stack(maya, &temps[1]);
         maya_pop_stack(maya, &temps[0]);
-        ftemp = (*(double*)temps) - (*(double*)&temps[1]);
+        temps[0].as_f64 -= temps[1].as_f64;
 
-        maya_push_stack(maya, &ftemp, 8);
+        maya_push_stack(maya, temps[0]);
 
         maya->pc++;
         break;
@@ -121,9 +122,9 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
 
         maya_pop_stack(maya, &temps[1]);
         maya_pop_stack(maya, &temps[0]);
-        temps[0] *= temps[1];
+        temps[0].as_i64 *= temps[1].as_i64;
 
-        maya_push_stack(maya, &temps[0], 8);
+        maya_push_stack(maya, temps[0]);
 
         maya->pc++;
         break;
@@ -133,9 +134,9 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
 
         maya_pop_stack(maya, &temps[1]);
         maya_pop_stack(maya, &temps[0]);
-        ftemp = (*(double*)temps) * (*(double*)&temps[1]);
+        temps[0].as_f64 *= temps[1].as_f64;
 
-        maya_push_stack(maya, &ftemp, 8);
+        maya_push_stack(maya, temps[0]);
 
         maya->pc++;
         break;
@@ -145,9 +146,13 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
 
         maya_pop_stack(maya, &temps[1]);
         maya_pop_stack(maya, &temps[0]);
-        temps[0] /= temps[1];
 
-        maya_push_stack(maya, &temps[0], 8);
+        if (temps[1].as_i64 == 0)
+            return ERR_DIV_BY_ZERO;
+
+        temps[0].as_i64 /= temps[1].as_i64;
+
+        maya_push_stack(maya, temps[0]);
 
         maya->pc++;
         break;
@@ -157,92 +162,150 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
 
         maya_pop_stack(maya, &temps[1]);
         maya_pop_stack(maya, &temps[0]);
-        ftemp = (*(double*)temps) / (*(double*)&temps[1]);
+        temps[0].as_f64 /= temps[1].as_f64;
 
-        maya_push_stack(maya, &ftemp, 8);
+        maya_push_stack(maya, temps[0]);
 
         maya->pc++;
         break;
     case OP_JMP:
-        maya->pc = instruction.operand;
+        maya->pc = instruction.operand.as_i64;
         break;
-    case OP_JEQ:
+    case OP_IJEQ:
         if (maya->sp < 2)
             return ERR_STACK_UNDERFLOW;
 
         maya_pop_stack(maya, &temps[1]);
         maya_pop_stack(maya, &temps[0]);
 
-        if (temps[0] == temps[1]) {
-            maya->pc = instruction.operand;
+        if (temps[0].as_i64 == temps[1].as_i64) {
+            maya->pc = instruction.operand.as_i64;
+        } else {
+            
+            maya->pc++;
+        }
+
+        break;
+    case OP_FJEQ:
+        if (maya->sp < 2)
+            return ERR_STACK_UNDERFLOW;
+
+        maya_pop_stack(maya, &temps[1]);
+        maya_pop_stack(maya, &temps[0]);
+
+        if (temps[0].as_f64 == temps[1].as_f64) {
+            maya->pc = instruction.operand.as_i64;
         } else {
             maya->pc++;
         }
 
         break;
-    case OP_JNEQ:
+    case OP_IJNEQ:
         if (maya->sp < 2)
             return ERR_STACK_UNDERFLOW;
 
         maya_pop_stack(maya, &temps[1]);
         maya_pop_stack(maya, &temps[0]);
 
-        if (temps[0] != temps[1]) {
-            maya->pc = instruction.operand;
+        if (temps[0].as_i64 != temps[1].as_i64) {
+            maya->pc = instruction.operand.as_i64;
+        } else {
+            
+            maya->pc++;
+        }
+
+        break;
+    case OP_FJNEQ:
+        if (maya->sp < 2)
+            return ERR_STACK_UNDERFLOW;
+
+        maya_pop_stack(maya, &temps[1]);
+        maya_pop_stack(maya, &temps[0]);
+
+        if (temps[0].as_f64 != temps[1].as_f64) {
+            maya->pc = instruction.operand.as_i64;
         } else {
             maya->pc++;
         }
 
         break;
-    case OP_JGT:
+    case OP_IJGT:
         if (maya->sp < 2)
             return ERR_STACK_UNDERFLOW;
 
         maya_pop_stack(maya, &temps[1]);
         maya_pop_stack(maya, &temps[0]);
 
-        if (temps[0] > temps[1]) {
-            maya->pc = instruction.operand;
+        if (temps[0].as_i64 > temps[1].as_i64) {
+            maya->pc = instruction.operand.as_i64;
         } else {
             maya->pc++;
         }
 
         break;
-    case OP_JLT:
+    case OP_FJGT:
         if (maya->sp < 2)
             return ERR_STACK_UNDERFLOW;
 
         maya_pop_stack(maya, &temps[1]);
         maya_pop_stack(maya, &temps[0]);
 
-        if (temps[0] < temps[1]) {
-            maya->pc = instruction.operand;
+        if (temps[0].as_f64 > temps[1].as_f64) {
+            maya->pc = instruction.operand.as_i64;
+        } else {
+            maya->pc++;
+        }
+
+        break;
+    case OP_IJLT:
+        if (maya->sp < 2)
+            return ERR_STACK_UNDERFLOW;
+
+        maya_pop_stack(maya, &temps[1]);
+        maya_pop_stack(maya, &temps[0]);
+
+        if (temps[0].as_i64 < temps[1].as_i64) {
+            maya->pc = instruction.operand.as_i64;
+        } else {
+            maya->pc++;
+        }
+
+        break;
+    case OP_FJLT:
+        if (maya->sp < 2)
+            return ERR_STACK_UNDERFLOW;
+
+        maya_pop_stack(maya, &temps[1]);
+        maya_pop_stack(maya, &temps[0]);
+
+        if (temps[0].as_f64 < temps[1].as_f64) {
+            maya->pc = instruction.operand.as_i64;
         } else {
             maya->pc++;
         }
 
         break;
     case OP_CALL:
-        maya->registers[MAYA_STACK_POINTER_REG] = maya->sp - maya->stack[maya->sp - 1];
-        maya->registers[MAYA_RETURN_VALUE_REG] = maya->pc + 1;
-        maya->pc = instruction.operand;
+        maya->registers[MAYA_STACK_POINTER_REG].as_i64 = maya->sp - maya->stack[maya->sp - 1].as_i64;
+        maya->registers[MAYA_RETURN_VALUE_REG].as_i64 = maya->pc + 1;
+        maya->pc = instruction.operand.as_i64;
         break;
     case OP_RET:
-        maya->sp = maya->registers[MAYA_STACK_POINTER_REG];
-        maya->pc = maya->registers[MAYA_RETURN_VALUE_REG];
+        maya->sp = maya->registers[MAYA_STACK_POINTER_REG].as_i64;
+        maya->pc = maya->registers[MAYA_RETURN_VALUE_REG].as_i64;
         break;
     case OP_LOAD:
-        if (instruction.operand < 0 || instruction.operand >= MAYA_REGISTERS_CAP)
+        if (instruction.operand.as_i64 < 0 || instruction.operand.as_i64 >= MAYA_REGISTERS_CAP)
             return ERR_INVALID_OPERAND;
 
-        error = maya_push_stack(maya, &maya->registers[instruction.operand], 8);
+        error = maya_push_stack(maya, maya->registers[instruction.operand.as_i64]);
         maya->pc++;
         break;
     case OP_STORE:
-        if (instruction.operand < 0 || instruction.operand >= MAYA_REGISTERS_CAP)
+        if (instruction.operand.as_i64 < 0 || instruction.operand.as_i64 >= MAYA_REGISTERS_CAP)
             return ERR_INVALID_OPERAND;
 
-        error = maya_pop_stack(maya, &maya->registers[instruction.operand]);
+        error = maya_pop_stack(maya, &maya->registers[instruction.operand.as_i64]);
         maya->pc++;
         break;
     case OP_DEBUG_PRINT_INT:
@@ -250,7 +313,7 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
             return ERR_STACK_UNDERFLOW;
 
         maya_pop_stack(maya, &temps[0]);
-        printf("%ld\n", temps[0]);
+        printf("%ld\n", temps[0].as_i64);
 
         maya->pc++;
         break;
@@ -259,9 +322,8 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
             return ERR_STACK_UNDERFLOW;
 
         maya_pop_stack(maya, &temps[0]);
-        ftemp = (*(double*)temps);
 
-        printf("%lf\n", ftemp);
+        printf("%lf\n", temps[0].as_f64);
 
         maya->pc++;
         break;
@@ -270,7 +332,7 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
             return ERR_STACK_UNDERFLOW;
 
         maya_pop_stack(maya, &temps[0]);
-        printf("%c\n", (char)temps[0]);
+        printf("%c\n", (char)temps[0].as_i64);
 
         maya->pc++;
         break;
@@ -287,7 +349,7 @@ static void maya_init(MayaVm* maya, MayaProgram program) {
     maya->program = program.instructions;
 
     for (size_t i = 0; i < MAYA_REGISTERS_CAP; i++)
-        maya->registers[i] = 0;
+        maya->registers[i] = (Frame) {0};
 
     maya->halt = false;
 }
@@ -320,7 +382,7 @@ static void usage(FILE* stream, const char* program_name) {
     fprintf(stream, "  -h                                   show usage.\n");
     fprintf(stream, "  -a <input.masm> [output.maya]        assemble mayasm file.\n");
     fprintf(stream, "  -e <input.maya>                      execute maya file.\n");
-    fprintf(stream, "  -d <input.maya>                      disassemble maya file.\n");
+    // fprintf(stream, "  -d <input.maya>                      disassemble maya file.\n");
 }
 
 static const char* get_actual_filename(const char* filepath) {

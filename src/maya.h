@@ -1,5 +1,6 @@
 #pragma once
 
+#include <assert.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
@@ -15,6 +16,7 @@ typedef enum MayaError_t {
     ERR_STACK_UNDERFLOW,
     ERR_INVALID_OPERAND,
     ERR_INVALID_INSTRUCTION,
+    ERR_DIV_BY_ZERO,
 } MayaError;
 
 typedef enum MayaOpCode_t {
@@ -31,10 +33,14 @@ typedef enum MayaOpCode_t {
     OP_IDIV,
     OP_FDIV,
     OP_JMP,
-    OP_JEQ,
-    OP_JNEQ,
-    OP_JGT,
-    OP_JLT,
+    OP_IJEQ,
+    OP_FJEQ,
+    OP_IJNEQ,
+    OP_FJNEQ,
+    OP_IJGT,
+    OP_FJGT,
+    OP_IJLT,
+    OP_FJLT,
     OP_CALL,
     OP_RET,
     OP_LOAD,
@@ -44,17 +50,25 @@ typedef enum MayaOpCode_t {
     OP_DEBUG_PRINT_CHAR,
 } MayaOpCode;
 
+typedef union Frame_t {
+    int64_t as_i64;
+    double as_f64;
+    void* as_ptr;
+} Frame;
+
+static_assert(sizeof(Frame) == 8, "Maya's frame size is expected to be 64 bit.");
+
 typedef struct MayaInstruction_t {
     MayaOpCode opcode;
-    int64_t operand;
+    Frame operand;
 } MayaInstruction;
 
 typedef struct MayaVm_t {
     size_t pc; // program counter
     size_t sp; // stack pointer
     MayaInstruction* program;
-    int64_t stack[MAYA_STACK_CAP];
-    int64_t registers[MAYA_REGISTERS_CAP];
+    Frame stack[MAYA_STACK_CAP];
+    Frame registers[MAYA_REGISTERS_CAP];
     bool halt;
 } MayaVm;
 

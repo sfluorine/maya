@@ -21,10 +21,14 @@ typedef enum TokenType_t {
     TOK_IDIV,
     TOK_FDIV,
     TOK_JMP,
-    TOK_JEQ,
-    TOK_JNEQ,
-    TOK_JGT,
-    TOK_JLT,
+    TOK_IJEQ,
+    TOK_FJEQ,
+    TOK_IJNEQ,
+    TOK_FJNEQ,
+    TOK_IJGT,
+    TOK_FJGT,
+    TOK_IJLT,
+    TOK_FJLT,
     TOK_CALL,
     TOK_RET,
     TOK_LOAD,
@@ -276,9 +280,9 @@ static Token* get_tokens(const char* source, size_t* length) {
                 goto reallocate;
             }
 
-            if (strncmp(start, "jeq", len) == 0) {
+            if (strncmp(start, "ijeq", len) == 0) {
                 tokens[*length] = (Token) {
-                    .type = TOK_JEQ,
+                    .type = TOK_IJEQ,
                     .start = start,
                     .len = len,
                 };
@@ -288,9 +292,9 @@ static Token* get_tokens(const char* source, size_t* length) {
                 goto reallocate;
             }
 
-            if (strncmp(start, "jneq", len) == 0) {
+            if (strncmp(start, "fjeq", len) == 0) {
                 tokens[*length] = (Token) {
-                    .type = TOK_JNEQ,
+                    .type = TOK_FJEQ,
                     .start = start,
                     .len = len,
                 };
@@ -300,9 +304,9 @@ static Token* get_tokens(const char* source, size_t* length) {
                 goto reallocate;
             }
 
-            if (strncmp(start, "jgt", len) == 0) {
+            if (strncmp(start, "ijneq", len) == 0) {
                 tokens[*length] = (Token) {
-                    .type = TOK_JGT,
+                    .type = TOK_IJNEQ,
                     .start = start,
                     .len = len,
                 };
@@ -312,9 +316,57 @@ static Token* get_tokens(const char* source, size_t* length) {
                 goto reallocate;
             }
 
-            if (strncmp(start, "jlt", len) == 0) {
+            if (strncmp(start, "fjneq", len) == 0) {
                 tokens[*length] = (Token) {
-                    .type = TOK_JLT,
+                    .type = TOK_FJNEQ,
+                    .start = start,
+                    .len = len,
+                };
+
+                *length += 1;
+
+                goto reallocate;
+            }
+
+            if (strncmp(start, "ijgt", len) == 0) {
+                tokens[*length] = (Token) {
+                    .type = TOK_IJGT,
+                    .start = start,
+                    .len = len,
+                };
+
+                *length += 1;
+
+                goto reallocate;
+            }
+
+            if (strncmp(start, "fjgt", len) == 0) {
+                tokens[*length] = (Token) {
+                    .type = TOK_FJGT,
+                    .start = start,
+                    .len = len,
+                };
+
+                *length += 1;
+
+                goto reallocate;
+            }
+
+            if (strncmp(start, "ijlt", len) == 0) {
+                tokens[*length] = (Token) {
+                    .type = TOK_IJLT,
+                    .start = start,
+                    .len = len,
+                };
+
+                *length += 1;
+
+                goto reallocate;
+            }
+
+            if (strncmp(start, "fjlt", len) == 0) {
+                tokens[*length] = (Token) {
+                    .type = TOK_FJLT,
                     .start = start,
                     .len = len,
                 };
@@ -431,10 +483,16 @@ static Token* get_tokens(const char* source, size_t* length) {
             goto reallocate;
         }
 
-        if (isdigit(*source)) {
+        if (isdigit(*source) || *source == '-') {
             bool is_float = false;
+
             size_t len = 0;
             size_t mantissa_len = 0;
+
+            if (*source == '-') {
+                len++;
+                source++;
+            }
 
             do {
                 len++;
@@ -584,10 +642,14 @@ static int restable_search(size_t rip) {
 static bool resolvable_instruction(MayaOpCode opcode) {
     switch (opcode) {
     case OP_JMP:
-    case OP_JEQ:
-    case OP_JNEQ:
-    case OP_JGT:
-    case OP_JLT:
+    case OP_IJEQ:
+    case OP_FJEQ:
+    case OP_IJNEQ:
+    case OP_FJNEQ:
+    case OP_IJGT:
+    case OP_FJGT:
+    case OP_IJLT:
+    case OP_FJLT:
     case OP_CALL:
         return true;
     default:
@@ -610,7 +672,7 @@ static void resolve_symbol(MayaInstruction* instructions, size_t len) {
                 exit(EXIT_FAILURE);
             }
 
-            instructions[i].operand = m_symtable[s_index].rip;
+            instructions[i].operand.as_i64 = m_symtable[s_index].rip;
             continue;
         }
     }
@@ -677,7 +739,7 @@ MayaProgram parse_program(const char* source) {
             if (tokens[tokens_cursor].type == TOK_INTLIT) {
                 instructions[len] = (MayaInstruction) {
                     .opcode = OP_PUSH,
-                    .operand = strtoll(tokens[tokens_cursor].start, NULL, 10),
+                    .operand = (Frame) { .as_i64 = strtoll(tokens[tokens_cursor].start, NULL, 10) },
                 };
 
                 tokens_cursor++;
@@ -685,9 +747,10 @@ MayaProgram parse_program(const char* source) {
             } 
 
             if (tokens[tokens_cursor].type == TOK_DOUBLELIT) {
-                instructions[len].opcode = OP_PUSH;
-                double x = atof(tokens[tokens_cursor].start);
-                memcpy(&instructions[len].operand, &x, 8);
+                instructions[len] = (MayaInstruction) {
+                    .opcode = OP_PUSH,
+                    .operand = (Frame) { .as_f64 = atof(tokens[tokens_cursor].start) }
+                };
 
                 tokens_cursor++;
                 goto reallocate;
@@ -697,7 +760,7 @@ MayaProgram parse_program(const char* source) {
                 for (size_t i = 0; i < tokens[tokens_cursor].len; i++) {
                     instructions[len] = (MayaInstruction) {
                         .opcode = OP_PUSH,
-                        .operand = tokens[tokens_cursor].start[i],
+                        .operand = (Frame) { .as_i64 = tokens[tokens_cursor].start[i] },
                     };
 
                     cap++;
@@ -707,7 +770,7 @@ MayaProgram parse_program(const char* source) {
 
                 instructions[len] = (MayaInstruction) {
                     .opcode = OP_PUSH,
-                    .operand = 0,
+                    .operand = (Frame) { .as_i64 = 0 },
                 };
 
                 cap++;
@@ -739,7 +802,7 @@ MayaProgram parse_program(const char* source) {
             if (tokens[tokens_cursor].type == TOK_INTLIT) {
                 instructions[len] = (MayaInstruction) {
                     .opcode = OP_DUP,
-                    .operand = strtoll(tokens[tokens_cursor].start, NULL, 10),
+                    .operand = (Frame) { .as_i64 = strtoll(tokens[tokens_cursor].start, NULL, 10) },
                 };
 
                 tokens_cursor++;
@@ -830,7 +893,7 @@ MayaProgram parse_program(const char* source) {
             if (tokens[tokens_cursor].type == TOK_INTLIT) {
                 instructions[len] = (MayaInstruction) {
                     .opcode = OP_JMP,
-                    .operand = strtoll(tokens[tokens_cursor].start, NULL, 10),
+                    .operand = (Frame) { .as_i64 = strtoll(tokens[tokens_cursor].start, NULL, 10) },
                 };
 
                 tokens_cursor++;
@@ -854,13 +917,13 @@ MayaProgram parse_program(const char* source) {
             exit(EXIT_FAILURE);
         }
 
-        if (current_token.type == TOK_JEQ) {
+        if (current_token.type == TOK_IJEQ) {
             tokens_cursor++;
 
             if (tokens[tokens_cursor].type == TOK_INTLIT) {
                 instructions[len] = (MayaInstruction) {
-                    .opcode = OP_JEQ,
-                    .operand = strtoll(tokens[tokens_cursor].start, NULL, 10),
+                    .opcode = OP_IJEQ,
+                    .operand = (Frame) { .as_i64 = strtoll(tokens[tokens_cursor].start, NULL, 10) },
                 };
 
                 tokens_cursor++;
@@ -871,7 +934,7 @@ MayaProgram parse_program(const char* source) {
                 restable_insert(tokens[tokens_cursor].start, tokens[tokens_cursor].len, len);
 
                 instructions[len] = (MayaInstruction) {
-                    .opcode = OP_JEQ,
+                    .opcode = OP_IJEQ,
                 };
 
                 tokens_cursor++;
@@ -884,13 +947,13 @@ MayaProgram parse_program(const char* source) {
             exit(EXIT_FAILURE);
         }
 
-        if (current_token.type == TOK_JNEQ) {
+        if (current_token.type == TOK_FJEQ) {
             tokens_cursor++;
 
             if (tokens[tokens_cursor].type == TOK_INTLIT) {
                 instructions[len] = (MayaInstruction) {
-                    .opcode = OP_JNEQ,
-                    .operand = strtoll(tokens[tokens_cursor].start, NULL, 10),
+                    .opcode = OP_FJEQ,
+                    .operand = (Frame) { .as_i64 = strtoll(tokens[tokens_cursor].start, NULL, 10) },
                 };
 
                 tokens_cursor++;
@@ -901,7 +964,7 @@ MayaProgram parse_program(const char* source) {
                 restable_insert(tokens[tokens_cursor].start, tokens[tokens_cursor].len, len);
 
                 instructions[len] = (MayaInstruction) {
-                    .opcode = OP_JNEQ,
+                    .opcode = OP_FJEQ,
                 };
 
                 tokens_cursor++;
@@ -914,13 +977,13 @@ MayaProgram parse_program(const char* source) {
             exit(EXIT_FAILURE);
         }
 
-        if (current_token.type == TOK_JGT) {
+        if (current_token.type == TOK_IJNEQ) {
             tokens_cursor++;
 
             if (tokens[tokens_cursor].type == TOK_INTLIT) {
                 instructions[len] = (MayaInstruction) {
-                    .opcode = OP_JGT,
-                    .operand = strtoll(tokens[tokens_cursor].start, NULL, 10),
+                    .opcode = OP_IJNEQ,
+                    .operand = (Frame) { .as_i64 = strtoll(tokens[tokens_cursor].start, NULL, 10) },
                 };
 
                 tokens_cursor++;
@@ -931,7 +994,7 @@ MayaProgram parse_program(const char* source) {
                 restable_insert(tokens[tokens_cursor].start, tokens[tokens_cursor].len, len);
 
                 instructions[len] = (MayaInstruction) {
-                    .opcode = OP_JGT,
+                    .opcode = OP_IJNEQ,
                 };
 
                 tokens_cursor++;
@@ -944,13 +1007,13 @@ MayaProgram parse_program(const char* source) {
             exit(EXIT_FAILURE);
         }
 
-        if (current_token.type == TOK_JLT) {
+        if (current_token.type == TOK_FJNEQ) {
             tokens_cursor++;
 
             if (tokens[tokens_cursor].type == TOK_INTLIT) {
                 instructions[len] = (MayaInstruction) {
-                    .opcode = OP_JLT,
-                    .operand = strtoll(tokens[tokens_cursor].start, NULL, 10),
+                    .opcode = OP_FJNEQ,
+                    .operand = (Frame) { .as_i64 = strtoll(tokens[tokens_cursor].start, NULL, 10) },
                 };
 
                 tokens_cursor++;
@@ -961,7 +1024,127 @@ MayaProgram parse_program(const char* source) {
                 restable_insert(tokens[tokens_cursor].start, tokens[tokens_cursor].len, len);
 
                 instructions[len] = (MayaInstruction) {
-                    .opcode = OP_JLT,
+                    .opcode = OP_FJNEQ,
+                };
+
+                tokens_cursor++;
+                goto reallocate;
+            }
+
+            fprintf(stderr, "ERROR: unexpected operand: '");
+            print_str(stderr, tokens[tokens_cursor].start, tokens[tokens_cursor].len);
+            fprintf(stderr, "'\n");
+            exit(EXIT_FAILURE);
+        }
+
+        if (current_token.type == TOK_IJGT) {
+            tokens_cursor++;
+
+            if (tokens[tokens_cursor].type == TOK_INTLIT) {
+                instructions[len] = (MayaInstruction) {
+                    .opcode = OP_IJGT,
+                    .operand = (Frame) { .as_i64 = strtoll(tokens[tokens_cursor].start, NULL, 10) },
+                };
+
+                tokens_cursor++;
+                goto reallocate;
+            } 
+
+            if (tokens[tokens_cursor].type == TOK_IDENT) {
+                restable_insert(tokens[tokens_cursor].start, tokens[tokens_cursor].len, len);
+
+                instructions[len] = (MayaInstruction) {
+                    .opcode = OP_IJGT,
+                };
+
+                tokens_cursor++;
+                goto reallocate;
+            }
+
+            fprintf(stderr, "ERROR: unexpected operand: '");
+            print_str(stderr, tokens[tokens_cursor].start, tokens[tokens_cursor].len);
+            fprintf(stderr, "'\n");
+            exit(EXIT_FAILURE);
+        }
+
+        if (current_token.type == TOK_FJGT) {
+            tokens_cursor++;
+
+            if (tokens[tokens_cursor].type == TOK_INTLIT) {
+                instructions[len] = (MayaInstruction) {
+                    .opcode = OP_FJGT,
+                    .operand = (Frame) { .as_i64 = strtoll(tokens[tokens_cursor].start, NULL, 10) },
+                };
+
+                tokens_cursor++;
+                goto reallocate;
+            } 
+
+            if (tokens[tokens_cursor].type == TOK_IDENT) {
+                restable_insert(tokens[tokens_cursor].start, tokens[tokens_cursor].len, len);
+
+                instructions[len] = (MayaInstruction) {
+                    .opcode = OP_FJGT,
+                };
+
+                tokens_cursor++;
+                goto reallocate;
+            }
+
+            fprintf(stderr, "ERROR: unexpected operand: '");
+            print_str(stderr, tokens[tokens_cursor].start, tokens[tokens_cursor].len);
+            fprintf(stderr, "'\n");
+            exit(EXIT_FAILURE);
+        }
+
+        if (current_token.type == TOK_IJLT) {
+            tokens_cursor++;
+
+            if (tokens[tokens_cursor].type == TOK_INTLIT) {
+                instructions[len] = (MayaInstruction) {
+                    .opcode = OP_IJLT,
+                    .operand = (Frame) { .as_i64 = strtoll(tokens[tokens_cursor].start, NULL, 10) },
+                };
+
+                tokens_cursor++;
+                goto reallocate;
+            } 
+
+            if (tokens[tokens_cursor].type == TOK_IDENT) {
+                restable_insert(tokens[tokens_cursor].start, tokens[tokens_cursor].len, len);
+
+                instructions[len] = (MayaInstruction) {
+                    .opcode = OP_IJLT,
+                };
+
+                tokens_cursor++;
+                goto reallocate;
+            }
+
+            fprintf(stderr, "ERROR: unexpected operand: '");
+            print_str(stderr, tokens[tokens_cursor].start, tokens[tokens_cursor].len);
+            fprintf(stderr, "'\n");
+            exit(EXIT_FAILURE);
+        }
+
+        if (current_token.type == TOK_FJLT) {
+            tokens_cursor++;
+
+            if (tokens[tokens_cursor].type == TOK_INTLIT) {
+                instructions[len] = (MayaInstruction) {
+                    .opcode = OP_FJLT,
+                    .operand = (Frame) { .as_i64 = strtoll(tokens[tokens_cursor].start, NULL, 10) },
+                };
+
+                tokens_cursor++;
+                goto reallocate;
+            } 
+
+            if (tokens[tokens_cursor].type == TOK_IDENT) {
+                restable_insert(tokens[tokens_cursor].start, tokens[tokens_cursor].len, len);
+
+                instructions[len] = (MayaInstruction) {
+                    .opcode = OP_FJLT,
                 };
 
                 tokens_cursor++;
@@ -1009,7 +1192,7 @@ MayaProgram parse_program(const char* source) {
             if (tokens[tokens_cursor].type == TOK_INTLIT) {
                 instructions[len] = (MayaInstruction) {
                     .opcode = OP_LOAD,
-                    .operand = strtoll(tokens[tokens_cursor].start, NULL, 10),
+                    .operand = (Frame) { .as_i64 = strtoll(tokens[tokens_cursor].start, NULL, 10) },
                 };
 
                 tokens_cursor++;
@@ -1028,7 +1211,7 @@ MayaProgram parse_program(const char* source) {
             if (tokens[tokens_cursor].type == TOK_INTLIT) {
                 instructions[len] = (MayaInstruction) {
                     .opcode = OP_STORE,
-                    .operand = strtoll(tokens[tokens_cursor].start, NULL, 10),
+                    .operand = (Frame) { strtoll(tokens[tokens_cursor].start, NULL, 10) },
                 };
 
                 tokens_cursor++;
@@ -1122,22 +1305,16 @@ void generate_bytecode(const char* out_file, MayaProgram program) {
     fclose(out_stream);
 }
 
-static char instruction_to_str[256];
-
 const char* maya_instruction_to_str(MayaInstruction instruction) {
-    double actual_x = (*(double*)&instruction.operand);
-
     switch (instruction.opcode) {
     case OP_HALT:
         return "halt";
     case OP_PUSH:
-        sprintf(instruction_to_str, "push %lf", actual_x);
-        break;
+        return "push";
     case OP_POP:
         return "pop";
     case OP_DUP:
-        sprintf(instruction_to_str, "dup %ld", instruction.operand);
-        break;
+        return "dup";
     case OP_IADD:
         return "iadd";
     case OP_FADD:
@@ -1155,31 +1332,31 @@ const char* maya_instruction_to_str(MayaInstruction instruction) {
     case OP_FDIV:
         return "fdiv";
     case OP_JMP:
-        sprintf(instruction_to_str, "jmp %ld", instruction.operand);
-        break;
-    case OP_JEQ:
-        sprintf(instruction_to_str, "jeq %ld", instruction.operand);
-        break;
-    case OP_JNEQ:
-        sprintf(instruction_to_str, "jneq %ld", instruction.operand);
-        break;
-    case OP_JGT:
-        sprintf(instruction_to_str, "jgt %ld", instruction.operand);
-        break;
-    case OP_JLT:
-        sprintf(instruction_to_str, "jlt %ld", instruction.operand);
-        break;
+        return "jmp";
+    case OP_IJEQ:
+        return "ijeq";
+    case OP_FJEQ:
+        return "fjeq";
+    case OP_IJNEQ:
+        return "ijneq";
+    case OP_FJNEQ:
+        return "fjneq";
+    case OP_IJGT:
+        return "ijgt";
+    case OP_FJGT:
+        return "ijgt";
+    case OP_IJLT:
+        return "ijlt";
+    case OP_FJLT:
+        return "fjlt";
     case OP_CALL:
-        sprintf(instruction_to_str, "call %ld", instruction.operand);
-        break;
+        return "call";
     case OP_RET:
         return "ret";
     case OP_LOAD:
-        sprintf(instruction_to_str, "load %ld", instruction.operand);
-        break;
+        return "load";
     case OP_STORE:
-        sprintf(instruction_to_str, "store %ld", instruction.operand);
-        break;
+        return "store";
     case OP_DEBUG_PRINT_INT:
         return "idebug_print";
     case OP_DEBUG_PRINT_DOUBLE:
@@ -1189,6 +1366,4 @@ const char* maya_instruction_to_str(MayaInstruction instruction) {
     default:
         return "invalid instruction";
     }
-
-    return instruction_to_str;
 }
