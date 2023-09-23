@@ -52,6 +52,7 @@ typedef enum MayaOpCode_t {
 
 typedef union Frame_t {
     int64_t as_i64;
+    uint64_t as_u64;
     double as_f64;
     void* as_ptr;
 } Frame;
@@ -64,7 +65,7 @@ typedef struct MayaInstruction_t {
 } MayaInstruction;
 
 typedef struct MayaVm_t {
-    size_t pc; // program counter
+    size_t rip; // program counter
     size_t sp; // stack pointer
     MayaInstruction* program;
     Frame stack[MAYA_STACK_CAP];
@@ -72,12 +73,10 @@ typedef struct MayaVm_t {
     bool halt;
 } MayaVm;
 
-typedef struct MayaProgram_t {
+typedef struct MayaHeader_t {
+    uint16_t magic;
     size_t starting_rip;
-    size_t instructions_len;
-    MayaInstruction* instructions;
-} MayaProgram;
+    size_t program_length;
+} MayaHeader;
 
-MayaProgram parse_program(const char* source);
-void generate_bytecode(const char* out_file, MayaProgram program);
-const char* maya_instruction_to_str(MayaInstruction instructions);
+void maya_translate_asm(const char* input_path, const char* output_path);

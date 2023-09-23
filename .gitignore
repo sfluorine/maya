@@ -1,2 +1,6 @@
+maya
 *.maya
-build/*
+.cache/*
+.sconsign.dblite
+
+src/*.o

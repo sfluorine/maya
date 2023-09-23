@@ -1,0 +1,18 @@
+[
+  {
+    "arguments": [
+      "/bin/gcc",
+      "-c",
+      "-I",
+      "src/include",
+      "-I",
+      "lib/sv/include",
+      "-o",
+      "src/maya.o",
+      "src/maya.c"
+    ],
+    "directory": "/home/fluorine/programming/maya",
+    "file": "/home/fluorine/programming/maya/src/maya.c",
+    "output": "/home/fluorine/programming/maya/src/maya.o"
+  }
+]
