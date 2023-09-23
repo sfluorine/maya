@@ -1,11 +1,5 @@
 entry start
 
-start:
-    push 1
-    call fibonacci
-
-    halt
-
 fibonacci:
     # setup
 
@@ -34,3 +28,10 @@ loop:
     ijneq loop
 
     ret
+
+start:
+    push 1
+    call fibonacci
+
+    halt
+

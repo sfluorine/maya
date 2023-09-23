@@ -51,7 +51,6 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
     switch (instruction.opcode) {
     case OP_HALT:
         maya->halt = true;
-        maya->rip++;
         break;
     case OP_PUSH:
         error = maya_push_stack(maya, instruction.operand);
@@ -62,10 +61,10 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
         maya->rip++;
         break;
     case OP_DUP:
-        if (maya->sp - instruction.operand.as_i64 < 0)
+        if (maya->sp - instruction.operand.as_u64 < 0)
             return ERR_STACK_UNDERFLOW;
 
-        error = maya_push_stack(maya, maya->stack[maya->sp - instruction.operand.as_i64]);
+        error = maya_push_stack(maya, maya->stack[maya->sp - instruction.operand.as_u64]);
         maya->rip++;
         break;
     case OP_IADD:
@@ -169,7 +168,7 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
         maya->rip++;
         break;
     case OP_JMP:
-        maya->rip = instruction.operand.as_i64;
+        maya->rip = instruction.operand.as_u64;
         break;
     case OP_IJEQ:
         if (maya->sp < 2)
@@ -179,7 +178,7 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
         maya_pop_stack(maya, &temps[0]);
 
         if (temps[0].as_i64 == temps[1].as_i64) {
-            maya->rip = instruction.operand.as_i64;
+            maya->rip = instruction.operand.as_u64;
         } else {
             
             maya->rip++;
@@ -194,7 +193,7 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
         maya_pop_stack(maya, &temps[0]);
 
         if (temps[0].as_f64 == temps[1].as_f64) {
-            maya->rip = instruction.operand.as_i64;
+            maya->rip = instruction.operand.as_u64;
         } else {
             maya->rip++;
         }
@@ -208,7 +207,7 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
         maya_pop_stack(maya, &temps[0]);
 
         if (temps[0].as_i64 != temps[1].as_i64) {
-            maya->rip = instruction.operand.as_i64;
+            maya->rip = instruction.operand.as_u64;
         } else {
             
             maya->rip++;
@@ -223,7 +222,7 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
         maya_pop_stack(maya, &temps[0]);
 
         if (temps[0].as_f64 != temps[1].as_f64) {
-            maya->rip = instruction.operand.as_i64;
+            maya->rip = instruction.operand.as_u64;
         } else {
             maya->rip++;
         }
@@ -237,7 +236,7 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
         maya_pop_stack(maya, &temps[0]);
 
         if (temps[0].as_i64 > temps[1].as_i64) {
-            maya->rip = instruction.operand.as_i64;
+            maya->rip = instruction.operand.as_u64;
         } else {
             maya->rip++;
         }
@@ -251,7 +250,7 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
         maya_pop_stack(maya, &temps[0]);
 
         if (temps[0].as_f64 > temps[1].as_f64) {
-            maya->rip = instruction.operand.as_i64;
+            maya->rip = instruction.operand.as_u64;
         } else {
             maya->rip++;
         }
@@ -265,7 +264,7 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
         maya_pop_stack(maya, &temps[0]);
 
         if (temps[0].as_i64 < temps[1].as_i64) {
-            maya->rip = instruction.operand.as_i64;
+            maya->rip = instruction.operand.as_u64;
         } else {
             maya->rip++;
         }
@@ -279,33 +278,33 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
         maya_pop_stack(maya, &temps[0]);
 
         if (temps[0].as_f64 < temps[1].as_f64) {
-            maya->rip = instruction.operand.as_i64;
+            maya->rip = instruction.operand.as_u64;
         } else {
             maya->rip++;
         }
 
         break;
     case OP_CALL:
-        maya->registers[MAYA_STACK_POINTER_REG].as_i64 = maya->sp - maya->stack[maya->sp - 1].as_i64;
-        maya->registers[MAYA_RETURN_VALUE_REG].as_i64 = maya->rip + 1;
+        maya->registers[MAYA_STACK_POINTER_REG].as_u64 = maya->sp - maya->stack[maya->sp - 1].as_u64;
+        maya->registers[MAYA_RETURN_VALUE_REG].as_u64 = maya->rip + 1;
         maya->rip = instruction.operand.as_i64;
         break;
     case OP_RET:
-        maya->sp = maya->registers[MAYA_STACK_POINTER_REG].as_i64;
-        maya->rip = maya->registers[MAYA_RETURN_VALUE_REG].as_i64;
+        maya->sp = maya->registers[MAYA_STACK_POINTER_REG].as_u64;
+        maya->rip = maya->registers[MAYA_RETURN_VALUE_REG].as_u64;
         break;
     case OP_LOAD:
-        if (instruction.operand.as_i64 < 0 || instruction.operand.as_i64 >= MAYA_REGISTERS_CAP)
+        if (instruction.operand.as_u64 < 0 || instruction.operand.as_u64 >= MAYA_REGISTERS_CAP)
             return ERR_INVALID_OPERAND;
 
-        error = maya_push_stack(maya, maya->registers[instruction.operand.as_i64]);
+        error = maya_push_stack(maya, maya->registers[instruction.operand.as_u64]);
         maya->rip++;
         break;
     case OP_STORE:
-        if (instruction.operand.as_i64 < 0 || instruction.operand.as_i64 >= MAYA_REGISTERS_CAP)
+        if (instruction.operand.as_u64 < 0 || instruction.operand.as_u64 >= MAYA_REGISTERS_CAP)
             return ERR_INVALID_OPERAND;
 
-        error = maya_pop_stack(maya, &maya->registers[instruction.operand.as_i64]);
+        error = maya_pop_stack(maya, &maya->registers[instruction.operand.as_u64]);
         maya->rip++;
         break;
     case OP_DEBUG_PRINT_INT:
@@ -368,10 +367,8 @@ static void usage(FILE* stream, const char* program_name) {
     fprintf(stream, "\n");
     fprintf(stream, "options:\n");
     fprintf(stream, "  -h                                   show usage.\n");
-    fprintf(stream, "  -o <output.maya>                     set output file.\n");
     fprintf(stream, "  -a <input.masm>                      assemble mayasm file.\n");
-    fprintf(stream, "  -e [<input.maya>...]                 execute maya files.\n");
-    // fprintf(stream, "  -d <input.maya>                      disassemble maya file.\n");
+    fprintf(stream, "  -e <input.maya>                      execute maya file.\n");
 }
 
 static const char* get_actual_filename(const char* filepath) {
@@ -387,6 +384,67 @@ static const char* get_actual_filename(const char* filepath) {
         filepath++;
 
     return filepath;
+}
+
+static const char* maya_instruction_to_str(MayaInstruction instruction) {
+    switch (instruction.opcode) {
+    case OP_HALT:
+        return "halt";
+    case OP_PUSH:
+        return "push";
+    case OP_POP:
+        return "pop";
+    case OP_DUP:
+        return "dup";
+    case OP_IADD:
+        return "iadd";
+    case OP_FADD:
+        return "fadd";
+    case OP_ISUB:
+        return "isub";
+    case OP_FSUB:
+        return "fsub";
+    case OP_IMUL:
+        return "imul";
+    case OP_FMUL:
+        return "fmul";
+    case OP_IDIV:
+        return "idiv";
+    case OP_FDIV:
+        return "fdiv";
+    case OP_JMP:
+        return "jmp";
+    case OP_IJEQ:
+        return "ijeq";
+    case OP_FJEQ:
+        return "fjeq";
+    case OP_IJNEQ:
+        return "ijneq";
+    case OP_FJNEQ:
+        return "fjneq";
+    case OP_IJGT:
+        return "ijgt";
+    case OP_FJGT:
+        return "fjgt";
+    case OP_IJLT:
+        return "ijlt";
+    case OP_FJLT:
+        return "fjlt";
+    case OP_CALL:
+        return "call";
+    case OP_RET:
+        return "ret";
+    case OP_LOAD:
+        return "load";
+    case OP_STORE:
+        return "store";
+    case OP_DEBUG_PRINT_INT:
+        return "idebug_print";
+    case OP_DEBUG_PRINT_DOUBLE:
+        return "fdebug_print";
+    case OP_DEBUG_PRINT_CHAR:
+        return "cdebug_print";
+    }
 }
 
 static void maya_load_program_from_file(MayaVm* maya, const char* filepath) {
@@ -411,22 +469,89 @@ static void maya_load_program_from_file(MayaVm* maya, const char* filepath) {
     memset(maya->registers, 0, sizeof(maya->registers));
     maya->halt = false;
 
-    MayaInstruction* instructions = malloc(sizeof(MayaInstruction) * header.program_length);
+    MayaInstruction* instructions = malloc(sizeof(MayaInstruction) * header.program_size);
     if (!instructions) {
         fprintf(stderr, "ERROR: cannot allocate memory\n");
         exit(EXIT_FAILURE);
     }
 
-    fread(instructions, sizeof(MayaInstruction), header.program_length, file);
+    fread(instructions, sizeof(MayaInstruction), header.program_size, file);
+    maya->program_size = header.program_size;
     maya->program = instructions;
 
     fclose(file);
 }
 
-int main(int argc, char** argv) {
-    maya_translate_asm("./examples/factorial.masm", "./factorial.maya");
+static void maya_debug(MayaVm* maya) {
+    if (!maya->program)
+        return;
 
+    while (!maya->halt) {
+        printf("rip -> %zu\n", maya->rip);
+        printf("sp  -> %zu\n", maya->sp);
+        printf("instruction -> %s\n", maya_instruction_to_str(maya->program[maya->rip]));
+
+        maya_execute_instruction(maya, maya->program[maya->rip]);
+        getchar();
+    }
+}
+
+static void maya_disassemble(MayaVm* maya) {
+    for (size_t i = 0; i < maya->program_size; i++)
+        printf("%s\n", maya_instruction_to_str(maya->program[i]));
+}
+
+int main(int argc, char** argv) {
+    const char* program = shift(&argc, &argv);
+
+    if (argc == 0) {
+        usage(stderr, program);
+        exit(EXIT_FAILURE);
+    }
+
+    const char* flag = shift(&argc, &argv);
+
+    if (strcmp(flag, "-a") == 0) {
+        char output[256];
+
+        const char* input = shift(&argc, &argv);
+        if (input == NULL) {
+            fprintf(stderr, "ERROR: expected input file\n");
+            exit(EXIT_FAILURE);
+        }
+
+        const char* actual_input = get_actual_filename(input);
+        strcpy(output, actual_input);
+
+        char* output_ptr = output;
+        while (*output_ptr && *output_ptr != '.')
+            output_ptr++;
+
+        if (*output_ptr == '.')
+            *output_ptr = 0;
+
+        strcat(output, ".maya");
+
+        maya_translate_asm(input, output);
+    } else if (strcmp(flag, "-e") == 0) {
+        const char* input = shift(&argc, &argv);
+        if (input == NULL) {
+            fprintf(stderr, "ERROR: expected input file\n");
+            exit(EXIT_FAILURE);
+        }
+
+        MayaVm maya;
+        maya_load_program_from_file(&maya, input);
+        maya_execute_program(&maya);
+        free(maya.program);
+    }
+
+    // maya_translate_asm("./examples/fibonacci.masm", "./fibonacci.maya");
+    //
     // MayaVm maya;
-    // maya_load_program_from_file(&maya, "./factorial.maya");
+    // maya_load_program_from_file(&maya, "./fibonacci.maya");
+    // maya_execute_program(&maya);
+    // maya_debug(&maya);
+    // maya_disassemble(&maya);
     // free(maya.program);
 }

@@ -307,7 +307,7 @@ void maya_translate_asm(const char* input_path, const char* output_path) {
             }
 
             if (sv_equals(opcode, sv_from_cstr("halt")))
-                SINGLE_INSTRUCTION(OP_POP);
+                SINGLE_INSTRUCTION(OP_HALT);
 
             if (sv_equals(opcode, sv_from_cstr("push"))) {
                 StringView operand = sv_chop_by_delim(&line, " ");
@@ -408,7 +408,7 @@ void maya_translate_asm(const char* input_path, const char* output_path) {
                 JMPS_INSTRUCTION(OP_IJEQ, "ijmp");
 
             if (sv_equals(opcode, sv_from_cstr("fjeq")))
-                JMPS_INSTRUCTION(OP_FJEQ, "fjmp");
+                JMPS_INSTRUCTION(OP_FJEQ, "fjeq");
 
             if (sv_equals(opcode, sv_from_cstr("ijneq")))
                 JMPS_INSTRUCTION(OP_IJNEQ, "ijneq");
@@ -423,10 +423,10 @@ void maya_translate_asm(const char* input_path, const char* output_path) {
                 JMPS_INSTRUCTION(OP_FJGT, "fjgt");
 
             if (sv_equals(opcode, sv_from_cstr("ijlt")))
-                JMPS_INSTRUCTION(OP_IJLT, "ilgt");
+                JMPS_INSTRUCTION(OP_IJLT, "ijlt");
 
             if (sv_equals(opcode, sv_from_cstr("fjlt")))
-                JMPS_INSTRUCTION(OP_FJLT, "flgt");
+                JMPS_INSTRUCTION(OP_FJLT, "fjlt");
 
             if (sv_equals(opcode, sv_from_cstr("call"))) {
                 StringView operand = sv_chop_by_delim(&line, " ");
@@ -533,7 +533,42 @@ void maya_translate_asm(const char* input_path, const char* output_path) {
         instructions = xrealloc(instructions, sizeof(MayaInstruction) * cap);
     }
 
+    MayaHeader header = {0};
+
+    uint8_t* magic = (uint8_t*)&header.magic;
+    magic[0] = 'M';
+    magic[1] = 'Y';
+
+    header.program_size = len;
+
+    if (entry.str != NULL && entry.len != 0) {
+        bool found = false;
+        for (size_t i = 0; i < m_labels_size; i++) {
+            if (sv_equals(entry, m_labels[i].label)) {
+                header.starting_rip = m_labels[i].rip;
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            fprintf(stderr, "ERROR: no such label for the entry point: '%.*s'\n", (int)entry.len, entry.str);
+            exit(EXIT_FAILURE);
+        }
+    }
+
     resolve_deferred_symbols(instructions);
+
+    FILE* ostream = fopen(output_path, "wb");
+    if (!ostream) {
+        fprintf(stderr, "ERROR: cannot open file '%s'\n", output_path);
+        exit(EXIT_FAILURE);
+    }
+
+    fwrite(&header, sizeof(MayaHeader), 1, ostream);
+    fwrite(instructions, sizeof(MayaInstruction), len, ostream);
+
+    fclose(ostream);
     free(instructions);
     free(buffer);
 }

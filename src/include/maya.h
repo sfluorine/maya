@@ -67,6 +67,7 @@ typedef struct MayaInstruction_t {
 typedef struct MayaVm_t {
     size_t rip; // program counter
     size_t sp; // stack pointer
+    size_t program_size;
     MayaInstruction* program;
     Frame stack[MAYA_STACK_CAP];
     Frame registers[MAYA_REGISTERS_CAP];
@@ -76,7 +77,7 @@ typedef struct MayaVm_t {
 typedef struct MayaHeader_t {
     uint16_t magic;
     size_t starting_rip;
-    size_t program_length;
+    size_t program_size;
 } MayaHeader;
 
 void maya_translate_asm(const char* input_path, const char* output_path);
