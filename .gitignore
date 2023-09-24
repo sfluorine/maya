@@ -5,3 +5,6 @@ maya
 
 src/*.o
 stdlib/*.o
+stdlib/*.os
+
+*.so

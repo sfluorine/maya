@@ -5,11 +5,10 @@ A simple stack based virtual machine.
 ## Quick Start
 
 ```console
-$ cd lib/sv
-$ scons
-$ cd ../../
 $ scons
 ```
+
+This will produce the maya executable file.
 
 ## Example
 
