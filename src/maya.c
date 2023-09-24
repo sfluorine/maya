@@ -416,7 +416,7 @@ static void maya_load_program_from_file(MayaVm* maya, const char* filepath) {
 static void maya_load_stdlib(MayaVm* maya) {
     maya->natives_size = 0;
 
-    maya->libhandle = dlopen("./libmaya_stdlib.so", RTLD_LOCAL | RTLD_LAZY);
+    maya->libhandle = dlopen("./stdlib/libmaya_stdlib.so", RTLD_LOCAL | RTLD_LAZY);
     if (!maya->libhandle) {
         fprintf(stderr, "ERROR: cannot load standard library: %s\n", dlerror());
         exit(EXIT_FAILURE);
@@ -472,7 +472,10 @@ int main(int argc, char** argv) {
 
         strcat(output, ".maya");
 
-        maya_translate_asm(input, output);
+        MayaVm maya;
+        maya_load_stdlib(&maya);
+        maya_translate_asm(input, output, &maya);
+        maya_unload_stdlib(&maya);
     } else if (strcmp(flag, "-e") == 0) {
         const char* input = shift(&argc, &argv);
         if (input == NULL) {

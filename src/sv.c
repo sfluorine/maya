@@ -46,6 +46,7 @@ StringView sv_chop_by_delim(StringView* sv, const char* delim) {
 StringView sv_chop_by_string_literal(StringView* sv) {
     // skip '"'
     sv->str++;
+    sv->len--;
 
     const char* start = sv->str;
     size_t len = 0;
@@ -57,6 +58,7 @@ StringView sv_chop_by_string_literal(StringView* sv) {
 
     // skip '"'
     sv->str++;
+    sv->len--;
 
     return (StringView) {
         .str = start,

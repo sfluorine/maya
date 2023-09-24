@@ -1,9 +1,14 @@
 #include <ctype.h>
+#include <dlfcn.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
 #include <stdbool.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 
 #include "maya.h"
 #include "sv.h"
@@ -227,6 +232,23 @@ typedef struct DeferredSymbol_t {
 static DeferredSymbol m_deferred[LABELS_MAX_CAP];
 static size_t m_deferred_size = 0;
 
+typedef struct NativeLabel_t {
+    StringView label;
+    StringView native_fun_name;
+    size_t index;
+} NativeLabel;
+
+static NativeLabel m_natives[LABELS_MAX_CAP];
+static size_t m_natives_size = 0;
+
+typedef struct DeferredNativeSymbol_t {
+    size_t rip;
+    StringView symbol;
+} DeferredNativeSymbol;
+
+static DeferredNativeSymbol m_deferred_natives[LABELS_MAX_CAP];
+static size_t m_deferred_natives_size = 0;
+
 static void resolve_deferred_symbols(MayaInstruction* instructions) {
     for (size_t i = 0; i < m_deferred_size; i++) {
         bool found = false;
@@ -246,12 +268,63 @@ static void resolve_deferred_symbols(MayaInstruction* instructions) {
     }
 }
 
-void maya_translate_asm(const char* input_path, const char* output_path) {
+static void resolve_deferred_natives_symbols(MayaInstruction* instructions, MayaVm* maya) {
+    for (size_t i = 0; i < m_natives_size; i++) {
+        char name[256];
+        StringView native_fun_name = m_natives[i].native_fun_name;
+
+        strncpy(name, native_fun_name.str, native_fun_name.len);
+        name[native_fun_name.len] = 0;
+
+        MayaNative native = dlsym(maya->libhandle, name);
+        if (!native) {
+            fprintf(stderr, "ERROR: no such native function: '%s'\n", name);
+            exit(EXIT_FAILURE);
+        }
+
+        for (size_t j = 0; j < maya->natives_size; j++) {
+            if (native == maya->natives[j]) {
+                m_natives[i].index = j;
+                break;
+            }
+        }
+    }
+
+    for (size_t i = 0; i < m_deferred_natives_size; i++) {
+        bool found = false;
+        for (size_t j = 0; j < m_natives_size; j++) {
+            if (sv_equals(m_deferred_natives[i].symbol, m_natives[j].label)) {
+                instructions[m_deferred_natives[i].rip].operand.as_u64 = m_natives[j].index;
+                found = true;
+                break;
+            } 
+        }
+
+        if (!found) {
+            StringView symbol = m_deferred_natives[i].symbol;
+            fprintf(stderr, "ERROR: no such native function: '%.*s'\n", (int)symbol.len, symbol.str);
+            exit(EXIT_FAILURE);
+        }
+    }
+}
+
+static bool check_is_regular_file(const char *path) {
+    struct stat path_stat;
+    stat(path, &path_stat);
+    return S_ISREG(path_stat.st_mode);
+}
+
+void maya_translate_asm(const char* input_path, const char* output_path, MayaVm* maya) {
     m_labels_size = 0;
 
     FILE* istream = fopen(input_path, "r");
     if (!istream) {
         fprintf(stderr, "ERROR: cannot open file '%s'\n", input_path);
+        exit(EXIT_FAILURE);
+    }
+
+    if (!check_is_regular_file(input_path)) {
+        fprintf(stderr, "ERROR: '%s' is not a file!\n", input_path);
         exit(EXIT_FAILURE);
     }
 
@@ -325,18 +398,38 @@ void maya_translate_asm(const char* input_path, const char* output_path) {
                 exit(EXIT_FAILURE);
             }
 
+            if (sv_equals(opcode, sv_from_cstr("extern"))) {
+                StringView operand = sv_chop_by_delim(&line, " ");
+                EXPECT_OPERAND(operand, "extern");
+
+                if (check_is_valid_identifier(operand)) {
+                    line = sv_strip_by_delim(line, " ");
+                    if (check_is_valid_string(line)) {
+                        StringView actual_function_name = sv_chop_by_string_literal(&line);
+
+                        m_natives[m_natives_size++] = (NativeLabel) {
+                            .label = operand,
+                            .native_fun_name = actual_function_name,
+                        };
+
+                        STRIP_COMMENT(&line);
+                        CHECK_EOL(&line);
+
+                        continue;
+                    }
+
+                    fprintf(stderr, "ERROR: expected a native function name\n");
+                    exit(EXIT_FAILURE);
+                }
+
+                fprintf(stderr, "ERROR: invalid operand: '%.*s'\n", (int)operand.len, operand.str);
+                exit(EXIT_FAILURE);
+            }
+
             if (sv_equals(opcode, sv_from_cstr("halt")))
                 SINGLE_INSTRUCTION(OP_HALT);
 
             if (sv_equals(opcode, sv_from_cstr("push"))) {
-                // line = sv_strip_by_delim(line, " ");
-                //
-                // if (check_is_valid_string(line)) {
-                //     StringView string = sv_chop_by_string_literal(&line);
-                //     printf("%.*s\n", (int)string.len, string.str);
-                //     exit(EXIT_SUCCESS);
-                // }
-                //
                 StringView operand = sv_chop_by_delim(&line, " ");
                 EXPECT_OPERAND(operand, "push");
 
@@ -503,6 +596,20 @@ void maya_translate_asm(const char* input_path, const char* output_path) {
                     CHECK_EOL(&line);
 
                     goto reallocate;
+                } else if (check_is_valid_identifier(operand)) {
+                    m_deferred_natives[m_deferred_natives_size++] = (DeferredNativeSymbol) {
+                        .rip = len,
+                        .symbol = operand,
+                    };
+
+                    instructions[len++] = (MayaInstruction) {
+                        .opcode = OP_NATIVE,
+                    };
+
+                    STRIP_COMMENT(&line);
+                    CHECK_EOL(&line);
+
+                    goto reallocate;
                 } else {
                     fprintf(stderr, "ERROR: invalid operand: '%.*s'\n", (int)operand.len, operand.str);
                     exit(EXIT_FAILURE);
@@ -607,6 +714,7 @@ void maya_translate_asm(const char* input_path, const char* output_path) {
         }
     }
 
+    resolve_deferred_natives_symbols(instructions, maya);
     resolve_deferred_symbols(instructions);
 
     FILE* ostream = fopen(output_path, "wb");

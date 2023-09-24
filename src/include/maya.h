@@ -89,4 +89,4 @@ typedef struct MayaHeader_t {
     size_t program_size;
 } MayaHeader;
 
-void maya_translate_asm(const char* input_path, const char* output_path);
+void maya_translate_asm(const char* input_path, const char* output_path, MayaVm* maya);
