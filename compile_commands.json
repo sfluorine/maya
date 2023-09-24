@@ -3,10 +3,10 @@
     "arguments": [
       "/bin/gcc",
       "-c",
+      "-Wall",
+      "-Wextra",
       "-I",
       "src/include",
-      "-I",
-      "lib/sv/include",
       "-o",
       "src/maya.o",
       "src/maya.c"
@@ -14,5 +14,53 @@
     "directory": "/home/fluorine/programming/maya",
     "file": "/home/fluorine/programming/maya/src/maya.c",
     "output": "/home/fluorine/programming/maya/src/maya.o"
+  },
+  {
+    "arguments": [
+      "/bin/gcc",
+      "-c",
+      "-Wall",
+      "-Wextra",
+      "-I",
+      "src/include",
+      "-o",
+      "src/mayasm.o",
+      "src/mayasm.c"
+    ],
+    "directory": "/home/fluorine/programming/maya",
+    "file": "/home/fluorine/programming/maya/src/mayasm.c",
+    "output": "/home/fluorine/programming/maya/src/mayasm.o"
+  },
+  {
+    "arguments": [
+      "/bin/gcc",
+      "-c",
+      "-Wall",
+      "-Wextra",
+      "-I",
+      "src/include",
+      "-o",
+      "src/sv.o",
+      "src/sv.c"
+    ],
+    "directory": "/home/fluorine/programming/maya",
+    "file": "/home/fluorine/programming/maya/src/sv.c",
+    "output": "/home/fluorine/programming/maya/src/sv.o"
+  },
+  {
+    "arguments": [
+      "/bin/gcc",
+      "-c",
+      "-Wall",
+      "-Wextra",
+      "-I",
+      "src/include",
+      "-o",
+      "maya_stdlib.o",
+      "stdlib/maya_stdlib.c"
+    ],
+    "directory": "/home/fluorine/programming/maya",
+    "file": "/home/fluorine/programming/maya/stdlib/maya_stdlib.c",
+    "output": "/home/fluorine/programming/maya/maya_stdlib.o"
   }
 ]

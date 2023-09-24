@@ -6,6 +6,7 @@
 #include <stdbool.h>
 
 #define MAYA_STACK_CAP 1024
+#define MAYA_NATIVES_CAP 1024
 #define MAYA_REGISTERS_CAP 7
 #define MAYA_STACK_POINTER_REG 5
 #define MAYA_RETURN_VALUE_REG 6
@@ -42,12 +43,10 @@ typedef enum MayaOpCode_t {
     OP_IJLT,
     OP_FJLT,
     OP_CALL,
+    OP_NATIVE,
     OP_RET,
     OP_LOAD,
     OP_STORE,
-    OP_DEBUG_PRINT_INT,
-    OP_DEBUG_PRINT_DOUBLE,
-    OP_DEBUG_PRINT_CHAR,
 } MayaOpCode;
 
 typedef union Frame_t {
@@ -64,18 +63,28 @@ typedef struct MayaInstruction_t {
     Frame operand;
 } MayaInstruction;
 
-typedef struct MayaVm_t {
-    size_t rip; // program counter
-    size_t sp; // stack pointer
-    size_t program_size;
+typedef struct MayaVm_t MayaVm;
+
+typedef MayaError (*MayaNative)(MayaVm*);
+
+struct MayaVm_t {
     MayaInstruction* program;
+    size_t rip;
+    size_t program_size;
+
     Frame stack[MAYA_STACK_CAP];
+    size_t sp; // stack pointer
     Frame registers[MAYA_REGISTERS_CAP];
+
+    MayaNative natives[MAYA_NATIVES_CAP];
+    size_t natives_size;
+
+    void* libhandle;
     bool halt;
-} MayaVm;
+};
 
 typedef struct MayaHeader_t {
-    uint16_t magic;
+    uint32_t magic;
     size_t starting_rip;
     size_t program_size;
 } MayaHeader;

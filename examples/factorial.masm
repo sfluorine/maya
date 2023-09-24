@@ -23,12 +23,11 @@ loop:
 
     ijneq loop
 
-    idebug_print
+    native 3
 
     ret
 
 start:
-    push 1
     call factorial
 
     halt

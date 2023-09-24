@@ -120,7 +120,7 @@ static bool check_is_valid_identifier(StringView sv) {
         do {
             sv.str++;
             sv.len--;
-        } while (sv.len != 0 && isalnum(sv.str[0]) || sv.str[0] == '_');
+        } while (sv.len != 0 && (isalnum(sv.str[0]) || sv.str[0] == '_'));
 
         if (sv.len != 0)
             return false;
@@ -187,6 +187,25 @@ static bool check_is_valid_number(StringView sv, char* type) {
         default:
             return false;
         }
+    }
+
+    return false;
+}
+
+static bool check_is_valid_string(StringView sv) {
+    if (sv.str[0] == '"') {
+        sv.str++;
+        sv.len--;
+
+        while (sv.len != 1 && sv.str[0] != '"') {
+            sv.str++;
+            sv.len--;
+        }
+
+        if (sv.str[0] != '"')
+            return false;
+
+        return true;
     }
 
     return false;
@@ -310,6 +329,14 @@ void maya_translate_asm(const char* input_path, const char* output_path) {
                 SINGLE_INSTRUCTION(OP_HALT);
 
             if (sv_equals(opcode, sv_from_cstr("push"))) {
+                // line = sv_strip_by_delim(line, " ");
+                //
+                // if (check_is_valid_string(line)) {
+                //     StringView string = sv_chop_by_string_literal(&line);
+                //     printf("%.*s\n", (int)string.len, string.str);
+                //     exit(EXIT_SUCCESS);
+                // }
+                //
                 StringView operand = sv_chop_by_delim(&line, " ");
                 EXPECT_OPERAND(operand, "push");
 
@@ -452,6 +479,36 @@ void maya_translate_asm(const char* input_path, const char* output_path) {
                 exit(EXIT_FAILURE);
             }
 
+            if (sv_equals(opcode, sv_from_cstr("native"))) {
+                StringView operand = sv_chop_by_delim(&line, " ");
+                EXPECT_OPERAND(operand, "native");
+
+                char type = 0;
+                if (check_is_valid_number(operand, &type)) {
+                    Frame frame;
+
+                    if (type == 0 || type == 'U') {
+                        frame.as_u64 = strtoull(operand.str, NULL, 10);
+                    } else {
+                        fprintf(stderr, "ERROR: native only accept integer values\n");
+                        exit(EXIT_FAILURE);
+                    }
+
+                    instructions[len++] = (MayaInstruction) {
+                        .opcode = OP_NATIVE,
+                        .operand = frame,
+                    };
+
+                    STRIP_COMMENT(&line);
+                    CHECK_EOL(&line);
+
+                    goto reallocate;
+                } else {
+                    fprintf(stderr, "ERROR: invalid operand: '%.*s'\n", (int)operand.len, operand.str);
+                    exit(EXIT_FAILURE);
+                }
+            }
+
             if (sv_equals(opcode, sv_from_cstr("ret")))
                 SINGLE_INSTRUCTION(OP_RET);
 
@@ -515,15 +572,6 @@ void maya_translate_asm(const char* input_path, const char* output_path) {
                 }
             }
 
-            if (sv_equals(opcode, sv_from_cstr("idebug_print")))
-                SINGLE_INSTRUCTION(OP_DEBUG_PRINT_INT);
-
-            if (sv_equals(opcode, sv_from_cstr("fdebug_print")))
-                SINGLE_INSTRUCTION(OP_DEBUG_PRINT_DOUBLE);
-
-            if (sv_equals(opcode, sv_from_cstr("cdebug_print")))
-                SINGLE_INSTRUCTION(OP_DEBUG_PRINT_CHAR);
-
             fprintf(stderr, "ERROR: invalid opcode: '%.*s'\n", (int)opcode.len, opcode.str);
             exit(EXIT_FAILURE);
         }
@@ -537,7 +585,9 @@ void maya_translate_asm(const char* input_path, const char* output_path) {
 
     uint8_t* magic = (uint8_t*)&header.magic;
     magic[0] = 'M';
-    magic[1] = 'Y';
+    magic[1] = 'A';
+    magic[2] = 'Y';
+    magic[3] = 'A';
 
     header.program_size = len;
 

@@ -1,3 +1,4 @@
-sources = Split('src/maya.c src/mayasm.c')
+sources = Split('./src/maya.c ./src/mayasm.c ./src/sv.c')
 
-Program(target = './maya', source = sources, CCFLAGS = '-I src/include -I lib/sv/include', LIBS=['sv'], LIBPATH = './lib/sv/')
+SharedLibrary(target = './maya_stdlib.so', source = './stdlib/maya_stdlib.c', CCFLAGS = '-Wall -Wextra -I src/include')
+Program(target = './maya', source = sources, CCFLAGS = '-Wall -Wextra -I src/include')

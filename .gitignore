@@ -4,3 +4,4 @@ maya
 .sconsign.dblite
 
 src/*.o
+stdlib/*.o

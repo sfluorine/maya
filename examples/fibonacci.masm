@@ -15,7 +15,7 @@ loop:
     iadd
 
     dup 1
-    idebug_print
+    native 3
 
     load 0
     push 1
@@ -30,7 +30,6 @@ loop:
     ret
 
 start:
-    push 1
     call fibonacci
 
     halt
