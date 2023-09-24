@@ -365,6 +365,8 @@ static const char* maya_instruction_to_str(MayaInstruction instruction) {
         return "fjlt";
     case OP_CALL:
         return "call";
+    case OP_NATIVE:
+        return "native";
     case OP_RET:
         return "ret";
     case OP_LOAD:
@@ -489,10 +491,12 @@ int main(int argc, char** argv) {
         }
 
         MayaVm maya;
-        maya_load_stdlib(&maya);
         maya_load_program_from_file(&maya, input);
         maya_disassemble(&maya);
-        maya_unload_stdlib(&maya);
         free(maya.program);
+    } else {
+        usage(stderr, program);
+        fprintf(stderr, "ERROR: invalid flag: '%s'\n", flag);
+        exit(EXIT_FAILURE);
     }
 }
