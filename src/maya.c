@@ -448,7 +448,10 @@ int main(int argc, char** argv) {
 
     const char* flag = shift(&argc, &argv);
 
-    if (strcmp(flag, "-a") == 0) {
+    if (strcmp(flag, "-h") == 0) {
+        usage(stdout, program);
+        exit(EXIT_SUCCESS);
+    } else if (strcmp(flag, "-a") == 0) {
         char output[256];
 
         const char* input = shift(&argc, &argv);
