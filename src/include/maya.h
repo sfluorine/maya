@@ -116,6 +116,8 @@ typedef struct MayaStringLiteral_t {
 } MayaStringLiteral;
 
 typedef struct MayaEnv_t {
+    char* buffer;
+
     MayaMacro macros[100];
     size_t macros_size; 
 

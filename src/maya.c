@@ -496,6 +496,41 @@ static void maya_unload_stdlib(MayaVm* maya) {
     dlclose(maya->stdlib_handle);
 }
 
+static void maya_load_env(MayaEnv* env, const char* input_file) {
+    FILE* istream = fopen(input_file, "r");
+    if (!istream) {
+        fprintf(stderr, "ERROR: cannot open file '%s'\n", input_file);
+        exit(EXIT_FAILURE);
+    }
+
+    fseek(istream, 0, SEEK_END);
+    long size = ftell(istream);
+    fseek(istream, 0, SEEK_SET);
+
+    char* buffer = malloc(sizeof(char) * size + 1);
+    buffer[size] = 0;
+    fread(buffer, sizeof(char), size, istream);
+
+    fclose(istream);
+
+    env->buffer = buffer;
+    env->macros_size = 0;
+    env->labels_size = 0;
+    env->deferred_symbol_size = 0;
+    env->str_literals_size = 0;
+
+}
+
+static void maya_unload_env(MayaEnv* env) {
+    if (env->buffer != NULL)
+        free(env->buffer);
+
+    env->macros_size = 0;
+    env->labels_size = 0;
+    env->deferred_symbol_size = 0;
+    env->str_literals_size = 0;
+}
+
 int main(int argc, char** argv) {
     const char* program = shift(&argc, &argv);
 
@@ -547,13 +582,10 @@ int main(int argc, char** argv) {
         fclose(istream);
 
         MayaEnv env;
-        env.macros_size = 0;
-        env.labels_size = 0;
-        env.deferred_symbol_size = 0;
-        env.str_literals_size = 0;
-
+        maya_load_env(&env, input);
         maya_translate_asm(&env, buffer, output);
         maya_link_program(&env, output);
+        maya_unload_env(&env);
 
         free(buffer);
     } else if (strcmp(flag, "-e") == 0) {
