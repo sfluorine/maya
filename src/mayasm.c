@@ -237,6 +237,49 @@ void maya_translate_asm(MayaEnv* env, const char* buffer, const char* output_pat
         while (line.len != 0) {
             StringView opcode = sv_chop_by_delim(&line, " ");
 
+            if (opcode.str[0] == '%' && sv_equals((StringView) {.str = opcode.str + 1, .len = opcode.len - 1}, sv_from_cstr("define"))) {
+                StringView id = sv_chop_by_delim(&line, " ");
+                EXPECT_OPERAND(id, "define");
+
+                if (!check_is_valid_identifier(id)) {
+                    fprintf(stderr, "ERROR: expected name for macro\n");
+                    exit(EXIT_FAILURE);
+                }
+
+                StringView operand = sv_chop_by_delim(&line, " ");
+                EXPECT_OPERAND(operand, "define");
+
+                char type = 0;
+                Frame frame;
+
+                if (check_is_valid_number(operand, &type)) {
+                    switch (type) {
+                    case 'U':
+                        frame.as_u64 = strtoull(operand.str, NULL, 10);
+                        break;
+                    case 'F':
+                        frame.as_f64 = strtod(operand.str, NULL);
+                        break;
+                    default:
+                        frame.as_i64 = strtoll(operand.str, NULL, 10);
+                        break;
+                    }
+                } else {
+                    fprintf(stderr, "ERROR: invalid operand: '%.*s'\n", (int)operand.len, operand.str);
+                    exit(EXIT_FAILURE);
+                }
+
+                env->macros[env->macros_size++] = (MayaMacro) {
+                    .name = id,
+                    .frame = frame,
+                };
+
+                STRIP_COMMENT(&line);
+                CHECK_EOL(&line);
+
+                continue;
+            }
+
             // handle label
             if (check_is_valid_identifier((StringView) {.str = opcode.str, .len = opcode.len - 1}) && opcode.str[opcode.len - 1] == ':') {
                 env->labels[env->labels_size++] = (MayaLabel) {
@@ -315,6 +358,20 @@ void maya_translate_asm(MayaEnv* env, const char* buffer, const char* output_pat
                     instructions[len++] = (MayaInstruction) {
                         .opcode = OP_PUSH,
                         .operand = frame,
+                    };
+
+                    STRIP_COMMENT(&line);
+                    CHECK_EOL(&line);
+
+                    goto reallocate;
+                } else if (check_is_valid_identifier(operand)) {
+                    env->deferred_symbol[env->deferred_symbol_size++] = (MayaDeferredSymbol) {
+                        .rip = len,
+                        .symbol = operand,
+                    };
+
+                    instructions[len++] = (MayaInstruction) {
+                        .opcode = OP_PUSH,
                     };
 
                     STRIP_COMMENT(&line);
@@ -459,6 +516,20 @@ void maya_translate_asm(MayaEnv* env, const char* buffer, const char* output_pat
                     CHECK_EOL(&line);
 
                     goto reallocate;
+                } else if (check_is_valid_identifier(operand)) {
+                    env->deferred_symbol[env->deferred_symbol_size++] = (MayaDeferredSymbol) {
+                        .rip = len,
+                        .symbol = operand,
+                    };
+
+                    instructions[len++] = (MayaInstruction) {
+                        .opcode = OP_NATIVE,
+                    };
+
+                    STRIP_COMMENT(&line);
+                    CHECK_EOL(&line);
+
+                    goto reallocate;
                 } else {
                     fprintf(stderr, "ERROR: invalid operand: '%.*s'\n", (int)operand.len, operand.str);
                     exit(EXIT_FAILURE);
@@ -578,4 +649,32 @@ void maya_translate_asm(MayaEnv* env, const char* buffer, const char* output_pat
 
     fclose(ostream);
     free(instructions);
+
+    size_t bigger = 0;
+    size_t lower = 0;
+    char type = 0;
+    if (env->labels_size >= env->macros_size) {
+        type = 'L';
+        bigger = env->labels_size;
+        lower = env->macros_size;
+    } else {
+        bigger = env->macros_size;
+        lower = env->labels_size;
+    }
+
+    for (size_t i = 0; i < bigger; i++) {
+        for (size_t j = 0; j < lower; j++) {
+            if (type == 'L') {
+                if (sv_equals(env->labels[i].id, env->macros[j].name)) {
+                    fprintf(stderr, "ERROR: duplicate label and macro name '%.*s'\n", (int)env->macros[i].name.len, env->macros[i].name.str);
+                    exit(EXIT_FAILURE);
+                }
+            } else {
+                if (sv_equals(env->labels[j].id, env->macros[i].name)) {
+                    fprintf(stderr, "ERROR: duplicate label and macro name '%.*s'\n", (int)env->macros[i].name.len, env->macros[i].name.str);
+                    exit(EXIT_FAILURE);
+                }
+            }
+        }
+    }
 }

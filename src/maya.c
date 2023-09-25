@@ -547,6 +547,7 @@ int main(int argc, char** argv) {
         fclose(istream);
 
         MayaEnv env;
+        env.macros_size = 0;
         env.labels_size = 0;
         env.deferred_symbol_size = 0;
         env.str_literals_size = 0;

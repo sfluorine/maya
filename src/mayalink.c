@@ -45,8 +45,19 @@ void maya_link_program(MayaEnv* env, const char* input_path) {
         bool found = false;
 
         for (size_t j = 0; j < env->labels_size; j++) {
-            if (sv_equals(env->deferred_symbol[i].symbol, env->labels[j].id)) {
+            if (sv_equals(symbol, env->labels[j].id)) {
                 instructions[env->deferred_symbol[i].rip].operand.as_u64 = env->labels[j].rip;
+                found = true;
+                break;
+            }
+        }
+
+        if (found)
+            continue;
+
+        for (size_t j = 0; j < env->macros_size; j++) {
+            if (sv_equals(symbol, env->macros[j].name)) {
+                instructions[env->deferred_symbol[i].rip].operand = env->macros[j].frame;
                 found = true;
                 break;
             }

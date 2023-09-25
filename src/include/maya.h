@@ -95,6 +95,11 @@ typedef struct MayaHeader_t {
     size_t program_size;
 } MayaHeader;
 
+typedef struct MayaMacro_t {
+    StringView name;
+    Frame frame;
+} MayaMacro;
+
 typedef struct MayaLabel_t {
     size_t rip;
     StringView id;
@@ -111,6 +116,9 @@ typedef struct MayaStringLiteral_t {
 } MayaStringLiteral;
 
 typedef struct MayaEnv_t {
+    MayaMacro macros[100];
+    size_t macros_size; 
+
     MayaLabel labels[100];
     size_t labels_size;
 
