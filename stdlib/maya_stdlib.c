@@ -37,3 +37,12 @@ MayaError maya_print_i64(MayaVm* maya) {
     maya->sp--;
     return ERR_OK;
 }
+
+MayaError maya_print_str(MayaVm* maya) {
+    if (maya->sp < 1)
+        return ERR_STACK_UNDERFLOW;
+
+    printf("%s\n", (char*)maya->stack[maya->sp - 1].as_ptr);
+    maya->sp--;
+    return ERR_OK;
+}

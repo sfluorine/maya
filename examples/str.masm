@@ -1,0 +1,7 @@
+entry main
+
+main:
+push "hello world!"
+native 4 # print strings
+
+halt

@@ -410,32 +410,90 @@ static void maya_load_program_from_file(MayaVm* maya, const char* filepath) {
     maya->program_size = header.program_size;
     maya->program = instructions;
 
-    fclose(file);
-}
+    long literals_start = ftell(file);
 
-static void maya_load_stdlib(MayaVm* maya) {
-    maya->natives_size = 0;
+    fseek(file, 0, SEEK_END);
+    long whole_file_size = ftell(file);
+    fseek(file, literals_start, SEEK_SET);
 
-    maya->libhandle = dlopen("./stdlib/libmaya_stdlib.so", RTLD_LOCAL | RTLD_LAZY);
-    if (!maya->libhandle) {
-        fprintf(stderr, "ERROR: cannot load standard library: %s\n", dlerror());
-        exit(EXIT_FAILURE);
+    long literals_size = whole_file_size - literals_start;
+
+    if (literals_size == 0) {
+        maya->literals = NULL;
+        maya->literals_size = 0;
+
+        fclose(file);
+        return;
     }
 
-    maya->natives[maya->natives_size++] = dlsym(maya->libhandle, "maya_alloc");
-    maya->natives[maya->natives_size++] = dlsym(maya->libhandle, "maya_free");
-    maya->natives[maya->natives_size++] = dlsym(maya->libhandle, "maya_print_f64");
-    maya->natives[maya->natives_size++] = dlsym(maya->libhandle, "maya_print_i64");
-}
+    maya->literals_size = literals_size;
+    char* literals = malloc(sizeof(MayaInstruction) * literals_size);
+    fread(literals, sizeof(char), literals_size, file);
+    maya->literals = literals;
 
-static void maya_unload_stdlib(MayaVm* maya) {
-    maya->natives_size = 0;
-    dlclose(maya->libhandle);
+    fclose(file);
+
+    while (literals_size > 0) {
+        char* starting_literal = literals;
+
+        while (*literals != 0) {
+            literals++;
+            literals_size--;
+        }
+
+        // skip the null terminating char
+        literals++;
+        literals_size--;
+
+        size_t rip = *literals;
+        maya->program[rip].operand.as_ptr = starting_literal;
+
+        literals += sizeof(size_t);
+        literals_size -= sizeof(size_t);
+    }
 }
 
 static void maya_disassemble(MayaVm* maya) {
     for (size_t i = 0; i < maya->program_size; i++)
         printf("%s\n", maya_instruction_to_str(maya->program[i]));
+}
+
+static void maya_init(MayaVm* maya) {
+    maya->program = NULL;
+    maya->rip = 0;
+    maya->program_size = 0;
+    maya->sp = 0;
+    maya->natives_size = 0;
+    maya->literals = NULL;
+    maya->literals_size = 0;
+}
+
+static void maya_deinit(MayaVm* maya) {
+    if (maya->program != NULL)
+        free(maya->program);
+
+    if (maya->literals != NULL)
+        free(maya->literals);
+
+    maya_init(maya);
+}
+
+static void maya_load_stdlib(MayaVm* maya) {
+    maya->stdlib_handle = dlopen("./stdlib/libmaya_stdlib.so", RTLD_LOCAL | RTLD_LAZY);
+    if (!maya->stdlib_handle) {
+        fprintf(stderr, "ERROR: cannot load stdlib: %s\n", dlerror());
+        exit(EXIT_FAILURE);
+    }
+
+    maya->natives[maya->natives_size++] = dlsym(maya->stdlib_handle, "maya_alloc");
+    maya->natives[maya->natives_size++] = dlsym(maya->stdlib_handle, "maya_free");
+    maya->natives[maya->natives_size++] = dlsym(maya->stdlib_handle, "maya_print_f64");
+    maya->natives[maya->natives_size++] = dlsym(maya->stdlib_handle, "maya_print_i64");
+    maya->natives[maya->natives_size++] = dlsym(maya->stdlib_handle, "maya_print_str");
+}
+
+static void maya_unload_stdlib(MayaVm* maya) {
+    dlclose(maya->stdlib_handle);
 }
 
 int main(int argc, char** argv) {
@@ -472,10 +530,31 @@ int main(int argc, char** argv) {
 
         strcat(output, ".maya");
 
-        MayaVm maya;
-        maya_load_stdlib(&maya);
-        maya_translate_asm(input, output, &maya);
-        maya_unload_stdlib(&maya);
+        FILE* istream = fopen(input, "r");
+        if (!istream) {
+            fprintf(stderr, "ERROR: cannot open file '%s'\n", input);
+            exit(EXIT_FAILURE);
+        }
+    
+        fseek(istream, 0, SEEK_END);
+        long size = ftell(istream);
+        fseek(istream, 0, SEEK_SET);
+
+        char* buffer = malloc(sizeof(char) * size + 1);
+        buffer[size] = 0;
+        fread(buffer, sizeof(char), size, istream);
+
+        fclose(istream);
+
+        MayaEnv env;
+        env.labels_size = 0;
+        env.deferred_symbol_size = 0;
+        env.str_literals_size = 0;
+
+        maya_translate_asm(&env, buffer, output);
+        maya_link_program(&env, output);
+
+        free(buffer);
     } else if (strcmp(flag, "-e") == 0) {
         const char* input = shift(&argc, &argv);
         if (input == NULL) {
@@ -484,11 +563,12 @@ int main(int argc, char** argv) {
         }
 
         MayaVm maya;
-        maya_load_stdlib(&maya);
+        maya_init(&maya);
         maya_load_program_from_file(&maya, input);
+        maya_load_stdlib(&maya);
         maya_execute_program(&maya);
         maya_unload_stdlib(&maya);
-        free(maya.program);
+        maya_deinit(&maya);
     } else if (strcmp(flag, "-d") == 0) {
         const char* input = shift(&argc, &argv);
         if (input == NULL) {
@@ -497,9 +577,10 @@ int main(int argc, char** argv) {
         }
 
         MayaVm maya;
+        maya_init(&maya);
         maya_load_program_from_file(&maya, input);
         maya_disassemble(&maya);
-        free(maya.program);
+        maya_deinit(&maya);
     } else {
         usage(stderr, program);
         fprintf(stderr, "ERROR: invalid flag: '%s'\n", flag);

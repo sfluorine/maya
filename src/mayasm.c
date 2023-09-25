@@ -60,7 +60,7 @@
                                                                                                 \
         char type = 0;                                                                          \
         if (check_is_valid_identifier(operand)) {                                               \
-            m_deferred[m_deferred_size++] = (DeferredSymbol) {                                  \
+            env->deferred_symbol[env->deferred_symbol_size++] = (MayaDeferredSymbol) {          \
                 .rip = len,                                                                     \
                 .symbol = operand,                                                              \
             };                                                                                  \
@@ -97,8 +97,6 @@
             exit(EXIT_FAILURE);                                                                 \
         }                                                                                       \
     }                                                                                           \
-
-#define LABELS_MAX_CAP 100
 
 static void* xmalloc(size_t size) {
     void* ptr = malloc(size);
@@ -216,133 +214,7 @@ static bool check_is_valid_string(StringView sv) {
     return false;
 }
 
-typedef struct Label_t {
-    StringView label;
-    size_t rip;
-} Label;
-
-static Label m_labels[LABELS_MAX_CAP];
-static size_t m_labels_size = 0;
-
-typedef struct DeferredSymbol_t {
-    size_t rip;
-    StringView symbol;
-} DeferredSymbol;
-
-static DeferredSymbol m_deferred[LABELS_MAX_CAP];
-static size_t m_deferred_size = 0;
-
-typedef struct NativeLabel_t {
-    StringView label;
-    StringView native_fun_name;
-    size_t index;
-} NativeLabel;
-
-static NativeLabel m_natives[LABELS_MAX_CAP];
-static size_t m_natives_size = 0;
-
-typedef struct DeferredNativeSymbol_t {
-    size_t rip;
-    StringView symbol;
-} DeferredNativeSymbol;
-
-static DeferredNativeSymbol m_deferred_natives[LABELS_MAX_CAP];
-static size_t m_deferred_natives_size = 0;
-
-static void resolve_deferred_symbols(MayaInstruction* instructions) {
-    for (size_t i = 0; i < m_deferred_size; i++) {
-        bool found = false;
-        for (size_t j = 0; j < m_labels_size; j++) {
-            if (sv_equals(m_deferred[i].symbol, m_labels[j].label)) {
-                instructions[m_deferred[i].rip].operand.as_u64 = m_labels[j].rip;
-                found = true;
-                break;
-            } 
-        }
-
-        if (!found) {
-            StringView symbol = m_deferred[i].symbol;
-            fprintf(stderr, "ERROR: no such label: '%.*s'\n", (int)symbol.len, symbol.str);
-            exit(EXIT_FAILURE);
-        }
-    }
-}
-
-static void resolve_deferred_natives_symbols(MayaInstruction* instructions, MayaVm* maya) {
-    for (size_t i = 0; i < m_natives_size; i++) {
-        char name[256];
-        StringView native_fun_name = m_natives[i].native_fun_name;
-
-        strncpy(name, native_fun_name.str, native_fun_name.len);
-        name[native_fun_name.len] = 0;
-
-        MayaNative native = dlsym(maya->libhandle, name);
-        if (!native) {
-            fprintf(stderr, "ERROR: no such native function: '%s'\n", name);
-            exit(EXIT_FAILURE);
-        }
-
-        for (size_t j = 0; j < maya->natives_size; j++) {
-            if (native == maya->natives[j]) {
-                m_natives[i].index = j;
-                break;
-            }
-        }
-    }
-
-    for (size_t i = 0; i < m_deferred_natives_size; i++) {
-        bool found = false;
-        for (size_t j = 0; j < m_natives_size; j++) {
-            if (sv_equals(m_deferred_natives[i].symbol, m_natives[j].label)) {
-                instructions[m_deferred_natives[i].rip].operand.as_u64 = m_natives[j].index;
-                found = true;
-                break;
-            } 
-        }
-
-        if (!found) {
-            StringView symbol = m_deferred_natives[i].symbol;
-            fprintf(stderr, "ERROR: no such native function: '%.*s'\n", (int)symbol.len, symbol.str);
-            exit(EXIT_FAILURE);
-        }
-    }
-}
-
-static bool check_is_regular_file(const char *path) {
-    struct stat path_stat;
-    stat(path, &path_stat);
-    return S_ISREG(path_stat.st_mode);
-}
-
-void maya_translate_asm(const char* input_path, const char* output_path, MayaVm* maya) {
-    m_labels_size = 0;
-
-    FILE* istream = fopen(input_path, "r");
-    if (!istream) {
-        fprintf(stderr, "ERROR: cannot open file '%s'\n", input_path);
-        exit(EXIT_FAILURE);
-    }
-
-    if (!check_is_regular_file(input_path)) {
-        fprintf(stderr, "ERROR: '%s' is not a file!\n", input_path);
-        exit(EXIT_FAILURE);
-    }
-
-    fseek(istream, 0, SEEK_END);
-    long size = ftell(istream);
-    fseek(istream, 0, SEEK_SET);
-
-    if (size == 0) {
-        fprintf(stderr, "ERROR: reading empty file!\n");
-        exit(EXIT_FAILURE);
-    }
-
-    char* buffer = malloc(sizeof(char) * size + 1);
-    fread(buffer, sizeof(char), size, istream);
-    buffer[size] = 0;
-
-    fclose(istream);
-
+void maya_translate_asm(MayaEnv* env, const char* buffer, const char* output_path) {
     size_t len = 0;
     size_t cap = 1;
     MayaInstruction* instructions = xmalloc(sizeof(MayaInstruction) * cap);
@@ -367,8 +239,8 @@ void maya_translate_asm(const char* input_path, const char* output_path, MayaVm*
 
             // handle label
             if (check_is_valid_identifier((StringView) {.str = opcode.str, .len = opcode.len - 1}) && opcode.str[opcode.len - 1] == ':') {
-                m_labels[m_labels_size++] = (Label) {
-                    .label = (StringView) {
+                env->labels[env->labels_size++] = (MayaLabel) {
+                    .id = (StringView) {
                         .str = opcode.str,
                         .len = opcode.len - 1,
                     },
@@ -398,38 +270,29 @@ void maya_translate_asm(const char* input_path, const char* output_path, MayaVm*
                 exit(EXIT_FAILURE);
             }
 
-            if (sv_equals(opcode, sv_from_cstr("extern"))) {
-                StringView operand = sv_chop_by_delim(&line, " ");
-                EXPECT_OPERAND(operand, "extern");
-
-                if (check_is_valid_identifier(operand)) {
-                    line = sv_strip_by_delim(line, " ");
-                    if (check_is_valid_string(line)) {
-                        StringView actual_function_name = sv_chop_by_string_literal(&line);
-
-                        m_natives[m_natives_size++] = (NativeLabel) {
-                            .label = operand,
-                            .native_fun_name = actual_function_name,
-                        };
-
-                        STRIP_COMMENT(&line);
-                        CHECK_EOL(&line);
-
-                        continue;
-                    }
-
-                    fprintf(stderr, "ERROR: expected a native function name\n");
-                    exit(EXIT_FAILURE);
-                }
-
-                fprintf(stderr, "ERROR: invalid operand: '%.*s'\n", (int)operand.len, operand.str);
-                exit(EXIT_FAILURE);
-            }
-
             if (sv_equals(opcode, sv_from_cstr("halt")))
                 SINGLE_INSTRUCTION(OP_HALT);
 
             if (sv_equals(opcode, sv_from_cstr("push"))) {
+                line = sv_strip_by_delim(line, " ");
+                if (check_is_valid_string(line)) {
+                    StringView string_literal = sv_chop_by_string_literal(&line);
+
+                    env->str_literals[env->str_literals_size++] = (MayaStringLiteral) {
+                        .literal = string_literal,
+                        .rip = len,
+                    };
+
+                    instructions[len++] = (MayaInstruction) {
+                        .opcode = OP_PUSH,
+                    };
+
+                    STRIP_COMMENT(&line);
+                    CHECK_EOL(&line);
+
+                    goto reallocate;
+                }
+
                 StringView operand = sv_chop_by_delim(&line, " ");
                 EXPECT_OPERAND(operand, "push");
 
@@ -553,7 +416,7 @@ void maya_translate_asm(const char* input_path, const char* output_path, MayaVm*
                 EXPECT_OPERAND(operand, "call");
 
                 if (check_is_valid_identifier(operand)) {
-                    m_deferred[m_deferred_size++] = (DeferredSymbol) {
+                    env->deferred_symbol[env->deferred_symbol_size++] = (MayaDeferredSymbol) {
                         .rip = len,
                         .symbol = operand,
                     };
@@ -590,20 +453,6 @@ void maya_translate_asm(const char* input_path, const char* output_path, MayaVm*
                     instructions[len++] = (MayaInstruction) {
                         .opcode = OP_NATIVE,
                         .operand = frame,
-                    };
-
-                    STRIP_COMMENT(&line);
-                    CHECK_EOL(&line);
-
-                    goto reallocate;
-                } else if (check_is_valid_identifier(operand)) {
-                    m_deferred_natives[m_deferred_natives_size++] = (DeferredNativeSymbol) {
-                        .rip = len,
-                        .symbol = operand,
-                    };
-
-                    instructions[len++] = (MayaInstruction) {
-                        .opcode = OP_NATIVE,
                     };
 
                     STRIP_COMMENT(&line);
@@ -691,18 +540,14 @@ void maya_translate_asm(const char* input_path, const char* output_path, MayaVm*
     MayaHeader header = {0};
 
     uint8_t* magic = (uint8_t*)&header.magic;
-    magic[0] = 'M';
-    magic[1] = 'A';
-    magic[2] = 'Y';
-    magic[3] = 'A';
-
+    memcpy(magic, "MAYA", 4);
     header.program_size = len;
 
     if (entry.str != NULL && entry.len != 0) {
         bool found = false;
-        for (size_t i = 0; i < m_labels_size; i++) {
-            if (sv_equals(entry, m_labels[i].label)) {
-                header.starting_rip = m_labels[i].rip;
+        for (size_t i = 0; i < env->labels_size; i++) {
+            if (sv_equals(entry, env->labels[i].id)) {
+                header.starting_rip = env->labels[i].rip;
                 found = true;
                 break;
             }
@@ -714,9 +559,6 @@ void maya_translate_asm(const char* input_path, const char* output_path, MayaVm*
         }
     }
 
-    resolve_deferred_natives_symbols(instructions, maya);
-    resolve_deferred_symbols(instructions);
-
     FILE* ostream = fopen(output_path, "wb");
     if (!ostream) {
         fprintf(stderr, "ERROR: cannot open file '%s'\n", output_path);
@@ -725,8 +567,15 @@ void maya_translate_asm(const char* input_path, const char* output_path, MayaVm*
 
     fwrite(&header, sizeof(MayaHeader), 1, ostream);
     fwrite(instructions, sizeof(MayaInstruction), len, ostream);
+    
+    for (size_t i = 0; i < env->str_literals_size; i++) {
+        StringView literal = env->str_literals[i].literal;
+        fwrite(literal.str, sizeof(uint8_t), literal.len, ostream);
+        uint8_t null = 0;
+        fwrite(&null, sizeof(uint8_t), 1, ostream);
+        fwrite(&env->str_literals[i].rip, sizeof(size_t), 1, ostream);
+    }
 
     fclose(ostream);
     free(instructions);
-    free(buffer);
 }

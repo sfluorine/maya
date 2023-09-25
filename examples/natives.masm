@@ -1,21 +1,19 @@
-extern malloc "maya_alloc"
-extern free   "maya_free"
-extern printf64 "maya_print_f64"
-extern printi64 "maya_print_i64"
+entry main
 
+main:
 push 34
-native malloc
+native 0
 
 push 0.485
 push 0.832
 fmul
-native printf64
+native 2
 
 push 34
 push 35
 iadd
-native printi64
+native 3
 
-native free
+native 1
 
 halt

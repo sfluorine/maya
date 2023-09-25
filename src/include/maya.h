@@ -5,6 +5,8 @@
 #include <stddef.h>
 #include <stdbool.h>
 
+#include "sv.h"
+
 #define MAYA_STACK_CAP 1024
 #define MAYA_NATIVES_CAP 1024
 #define MAYA_REGISTERS_CAP 7
@@ -79,7 +81,11 @@ struct MayaVm_t {
     MayaNative natives[MAYA_NATIVES_CAP];
     size_t natives_size;
 
-    void* libhandle;
+    char* literals;
+    size_t literals_size;
+
+    void* stdlib_handle;
+
     bool halt;
 };
 
@@ -89,4 +95,31 @@ typedef struct MayaHeader_t {
     size_t program_size;
 } MayaHeader;
 
-void maya_translate_asm(const char* input_path, const char* output_path, MayaVm* maya);
+typedef struct MayaLabel_t {
+    size_t rip;
+    StringView id;
+} MayaLabel;
+
+typedef struct MayaDeferredSymbol_t {
+    size_t rip;
+    StringView symbol;
+} MayaDeferredSymbol;
+
+typedef struct MayaStringLiteral_t {
+    size_t rip;
+    StringView literal;
+} MayaStringLiteral;
+
+typedef struct MayaEnv_t {
+    MayaLabel labels[100];
+    size_t labels_size;
+
+    MayaDeferredSymbol deferred_symbol[100];
+    size_t deferred_symbol_size;
+
+    MayaStringLiteral str_literals[100];
+    size_t str_literals_size;
+} MayaEnv;
+
+void maya_translate_asm(MayaEnv* env, const char* input_path, const char* output_path);
+void maya_link_program(MayaEnv* env, const char* input_path);
