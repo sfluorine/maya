@@ -39,6 +39,35 @@ void maya_link_program(MayaEnv* env, const char* input_path) {
 
     fclose(file);
 
+    size_t bigger = 0;
+    size_t lower = 0;
+    char type = 0;
+    if (env->labels_size >= env->macros_size) {
+        type = 'L';
+        bigger = env->labels_size;
+        lower = env->macros_size;
+    } else {
+        bigger = env->macros_size;
+        lower = env->labels_size;
+    }
+
+    // check for duplicate labels in both labels and macros
+    for (size_t i = 0; i < bigger; i++) {
+        for (size_t j = 0; j < lower; j++) {
+            if (type == 'L') {
+                if (sv_equals(env->labels[i].id, env->macros[j].name)) {
+                    fprintf(stderr, "ERROR: duplicate label and macro name '%.*s'\n", (int)env->macros[i].name.len, env->macros[i].name.str);
+                    exit(EXIT_FAILURE);
+                }
+            } else {
+                if (sv_equals(env->labels[j].id, env->macros[i].name)) {
+                    fprintf(stderr, "ERROR: duplicate label and macro name '%.*s'\n", (int)env->macros[i].name.len, env->macros[i].name.str);
+                    exit(EXIT_FAILURE);
+                }
+            }
+        }
+    }
+
     // resolve deferred label
     for (size_t i = 0; i < env->deferred_symbol_size; i++) {
         StringView symbol = env->deferred_symbol[i].symbol;
@@ -46,7 +75,7 @@ void maya_link_program(MayaEnv* env, const char* input_path) {
 
         for (size_t j = 0; j < env->labels_size; j++) {
             if (sv_equals(symbol, env->labels[j].id)) {
-                instructions[env->deferred_symbol[i].rip].operand.as_u64 = env->labels[j].rip;
+                instructions[env->deferred_symbol[i].rip].operands[0].as_u64 = env->labels[j].rip;
                 found = true;
                 break;
             }
@@ -57,7 +86,7 @@ void maya_link_program(MayaEnv* env, const char* input_path) {
 
         for (size_t j = 0; j < env->macros_size; j++) {
             if (sv_equals(symbol, env->macros[j].name)) {
-                instructions[env->deferred_symbol[i].rip].operand = env->macros[j].frame;
+                instructions[env->deferred_symbol[i].rip].operands[0] = env->macros[j].frame;
                 found = true;
                 break;
             }

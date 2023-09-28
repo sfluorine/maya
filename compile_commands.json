@@ -40,6 +40,22 @@
       "-I",
       "src/include",
       "-o",
+      "src/mayalink.o",
+      "src/mayalink.c"
+    ],
+    "directory": "/home/fluorine/programming/maya",
+    "file": "/home/fluorine/programming/maya/src/mayalink.c",
+    "output": "/home/fluorine/programming/maya/src/mayalink.o"
+  },
+  {
+    "arguments": [
+      "/bin/gcc",
+      "-c",
+      "-Wall",
+      "-Wextra",
+      "-I",
+      "src/include",
+      "-o",
       "src/sv.o",
       "src/sv.c"
     ],
@@ -55,12 +71,13 @@
       "-Wextra",
       "-I",
       "src/include",
+      "-fPIC",
       "-o",
-      "maya_stdlib.o",
+      "stdlib/maya_stdlib.os",
       "stdlib/maya_stdlib.c"
     ],
     "directory": "/home/fluorine/programming/maya",
     "file": "/home/fluorine/programming/maya/stdlib/maya_stdlib.c",
-    "output": "/home/fluorine/programming/maya/maya_stdlib.o"
+    "output": "/home/fluorine/programming/maya/stdlib/maya_stdlib.os"
   }
 ]

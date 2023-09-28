@@ -35,7 +35,7 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
         if (maya->sp >= MAYA_STACK_CAP)
             return ERR_STACK_OVERFLOW;
 
-        maya->stack[maya->sp++] = instruction.operand;
+        maya->stack[maya->sp++] = instruction.operands[0];
         maya->rip++;
         break;
     case OP_POP:
@@ -49,10 +49,10 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
         if (maya->sp >= MAYA_STACK_CAP)
             return ERR_STACK_OVERFLOW;
 
-        if ((int64_t)maya->sp - instruction.operand.as_i64 < 0)
+        if ((int64_t)maya->sp - instruction.operands[0].as_i64 < 0)
             return ERR_STACK_UNDERFLOW;
 
-        maya->stack[maya->sp] = maya->stack[maya->sp - instruction.operand.as_u64];
+        maya->stack[maya->sp] = maya->stack[maya->sp - instruction.operands[0].as_u64];
         maya->sp++;
         maya->rip++;
         break;
@@ -124,14 +124,14 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
         maya->rip++;
         break;
     case OP_JMP:
-        maya->rip = instruction.operand.as_u64;
+        maya->rip = instruction.operands[0].as_u64;
         break;
     case OP_IJEQ:
         if (maya->sp < 2)
             return ERR_STACK_UNDERFLOW;
 
         if (maya->stack[maya->sp - 2].as_i64 == maya->stack[maya->sp - 1].as_i64) {
-            maya->rip = instruction.operand.as_u64;
+            maya->rip = instruction.operands[0].as_u64;
         } else {
             maya->rip++;
         }
@@ -143,7 +143,7 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
             return ERR_STACK_UNDERFLOW;
 
         if (maya->stack[maya->sp - 2].as_f64 == maya->stack[maya->sp - 1].as_f64) {
-            maya->rip = instruction.operand.as_u64;
+            maya->rip = instruction.operands[0].as_u64;
         } else {
             maya->rip++;
         }
@@ -155,7 +155,7 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
             return ERR_STACK_UNDERFLOW;
 
         if (maya->stack[maya->sp - 2].as_i64 != maya->stack[maya->sp - 1].as_i64) {
-            maya->rip = instruction.operand.as_u64;
+            maya->rip = instruction.operands[0].as_u64;
         } else {
             maya->rip++;
         }
@@ -167,7 +167,7 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
             return ERR_STACK_UNDERFLOW;
 
         if (maya->stack[maya->sp - 2].as_f64 != maya->stack[maya->sp - 1].as_f64) {
-            maya->rip = instruction.operand.as_u64;
+            maya->rip = instruction.operands[0].as_u64;
         } else {
             maya->rip++;
         }
@@ -179,7 +179,7 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
             return ERR_STACK_UNDERFLOW;
 
         if (maya->stack[maya->sp - 2].as_i64 > maya->stack[maya->sp - 1].as_i64) {
-            maya->rip = instruction.operand.as_u64;
+            maya->rip = instruction.operands[0].as_u64;
         } else {
             maya->rip++;
         }
@@ -191,7 +191,7 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
             return ERR_STACK_UNDERFLOW;
 
         if (maya->stack[maya->sp - 2].as_f64 > maya->stack[maya->sp - 1].as_f64) {
-            maya->rip = instruction.operand.as_u64;
+            maya->rip = instruction.operands[0].as_u64;
         } else {
             maya->rip++;
         }
@@ -203,7 +203,7 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
             return ERR_STACK_UNDERFLOW;
 
         if (maya->stack[maya->sp - 2].as_i64 < maya->stack[maya->sp - 1].as_i64) {
-            maya->rip = instruction.operand.as_u64;
+            maya->rip = instruction.operands[0].as_u64;
         } else {
             maya->rip++;
         }
@@ -215,7 +215,7 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
             return ERR_STACK_UNDERFLOW;
 
         if (maya->stack[maya->sp - 2].as_f64 < maya->stack[maya->sp - 1].as_f64) {
-            maya->rip = instruction.operand.as_u64;
+            maya->rip = instruction.operands[0].as_u64;
         } else {
             maya->rip++;
         }
@@ -225,17 +225,17 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
     case OP_CALL:
         maya->registers[MAYA_RETURN_VALUE_REG].as_u64 = maya->rip + 1;
         maya->registers[MAYA_STACK_POINTER_REG].as_u64 = maya->sp;
-        maya->rip = instruction.operand.as_u64;
+        maya->rip = instruction.operands[0].as_u64;
         break;
     case OP_NATIVE:
         if (maya->sp < 1)
             return ERR_STACK_UNDERFLOW;
 
-        if (instruction.operand.as_u64 >= maya->natives_size)
+        if (instruction.operands[0].as_u64 >= maya->natives_size)
             return ERR_INVALID_OPERAND;
 
         {
-            MayaError error = maya->natives[instruction.operand.as_u64](maya);
+            MayaError error = maya->natives[instruction.operands[0].as_u64](maya);
             if (error != ERR_OK)
                 return error;
         }
@@ -249,21 +249,52 @@ static MayaError maya_execute_instruction(MayaVm* maya, MayaInstruction instruct
         if (maya->sp >= MAYA_STACK_CAP)
             return ERR_STACK_OVERFLOW;
 
-        if (instruction.operand.as_i64 < 0 || instruction.operand.as_u64 >= MAYA_REGISTERS_CAP)
+        if (instruction.operands[0].as_i64 < 0 || instruction.operands[0].as_u64 >= MAYA_REGISTERS_CAP)
             return ERR_INVALID_OPERAND;
 
-        maya->stack[maya->sp++] = maya->registers[instruction.operand.as_u64];
+        maya->stack[maya->sp++] = maya->registers[instruction.operands[0].as_u64];
         maya->rip++;
         break;
     case OP_STORE:
         if (maya->sp < 1)
             return ERR_STACK_UNDERFLOW;
 
-        if (instruction.operand.as_i64 < 0 || instruction.operand.as_u64 >= MAYA_REGISTERS_CAP)
+        if (instruction.operands[0].as_i64 < 0 || instruction.operands[0].as_u64 >= MAYA_REGISTERS_CAP)
             return ERR_INVALID_OPERAND;
 
-        maya->registers[instruction.operand.as_u64] = maya->stack[maya->sp - 1];
+        maya->registers[instruction.operands[0].as_u64] = maya->stack[maya->sp - 1];
         maya->sp--;
+        maya->rip++;
+        break;
+    case OP_LOAD_PTR:
+        if (maya->sp >= MAYA_STACK_CAP)
+            return ERR_STACK_OVERFLOW;
+
+        if (instruction.operands[0].as_i64 < 0 || instruction.operands[0].as_u64 >= MAYA_REGISTERS_CAP)
+            return ERR_INVALID_OPERAND;
+
+        maya->stack[maya->sp].as_ptr = &maya->stack[maya->sp - instruction.operands[0].as_u64];
+        maya->sp++;
+        maya->rip++;
+        break;
+    case OP_PUSH_PTR:
+        if (maya->sp < 1)
+            return ERR_STACK_UNDERFLOW;
+
+        if (instruction.operands[1].as_i64 < 0 || instruction.operands[1].as_u64 >= MAYA_REGISTERS_CAP)
+            return ERR_INVALID_OPERAND;
+
+        memcpy(maya->stack[maya->sp - 1].as_ptr + (instruction.operands[0].as_u64 * sizeof(Frame)), &maya->registers[instruction.operands[1].as_u64], sizeof(Frame));
+        maya->rip++;
+        break;
+    case OP_STORE_PTR:
+        if (maya->sp < 1)
+            return ERR_STACK_UNDERFLOW;
+
+        if (instruction.operands[1].as_i64 < 0 || instruction.operands[1].as_u64 >= MAYA_REGISTERS_CAP)
+            return ERR_INVALID_OPERAND;
+
+        memcpy(&maya->registers[instruction.operands[1].as_u64], maya->stack[maya->sp - 1].as_ptr + (instruction.operands[0].as_u64 * sizeof(Frame)), sizeof(Frame));
         maya->rip++;
         break;
     default:
@@ -396,9 +427,6 @@ static void maya_load_program_from_file(MayaVm* maya, const char* filepath) {
     }
 
     maya->rip = header.starting_rip;
-    maya->sp = 0;
-    memset(maya->registers, 0, sizeof(maya->registers));
-    maya->halt = false;
 
     MayaInstruction* instructions = malloc(sizeof(MayaInstruction) * header.program_size);
     if (!instructions) {
@@ -433,6 +461,7 @@ static void maya_load_program_from_file(MayaVm* maya, const char* filepath) {
 
     fclose(file);
 
+    // load string literals.
     while (literals_size > 0) {
         char* starting_literal = literals;
 
@@ -446,7 +475,7 @@ static void maya_load_program_from_file(MayaVm* maya, const char* filepath) {
         literals_size--;
 
         size_t rip = *literals;
-        maya->program[rip].operand.as_ptr = starting_literal;
+        maya->program[rip].operands[0].as_ptr = starting_literal;
 
         literals += sizeof(size_t);
         literals_size -= sizeof(size_t);
@@ -466,6 +495,10 @@ static void maya_init(MayaVm* maya) {
     maya->natives_size = 0;
     maya->literals = NULL;
     maya->literals_size = 0;
+
+    memset(maya->registers, 0, sizeof(maya->registers));
+
+    maya->halt = false;
 }
 
 static void maya_deinit(MayaVm* maya) {
@@ -490,6 +523,7 @@ static void maya_load_stdlib(MayaVm* maya) {
     maya->natives[maya->natives_size++] = dlsym(maya->stdlib_handle, "maya_print_f64");
     maya->natives[maya->natives_size++] = dlsym(maya->stdlib_handle, "maya_print_i64");
     maya->natives[maya->natives_size++] = dlsym(maya->stdlib_handle, "maya_print_str");
+    maya->natives[maya->natives_size++] = dlsym(maya->stdlib_handle, "maya_print_ptr");
 }
 
 static void maya_unload_stdlib(MayaVm* maya) {
@@ -518,7 +552,6 @@ static void maya_load_env(MayaEnv* env, const char* input_file) {
     env->labels_size = 0;
     env->deferred_symbol_size = 0;
     env->str_literals_size = 0;
-
 }
 
 static void maya_unload_env(MayaEnv* env) {

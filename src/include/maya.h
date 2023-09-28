@@ -12,6 +12,7 @@
 #define MAYA_REGISTERS_CAP 7
 #define MAYA_STACK_POINTER_REG 5
 #define MAYA_RETURN_VALUE_REG 6
+#define MAYA_OPERANDS_CAP 2
 
 typedef enum MayaError_t {
     ERR_OK,
@@ -49,6 +50,9 @@ typedef enum MayaOpCode_t {
     OP_RET,
     OP_LOAD,
     OP_STORE,
+    OP_LOAD_PTR,
+    OP_PUSH_PTR,
+    OP_STORE_PTR,
 } MayaOpCode;
 
 typedef union Frame_t {
@@ -62,7 +66,7 @@ static_assert(sizeof(Frame) == 8, "Maya's frame size is expected to be 64 bit.")
 
 typedef struct MayaInstruction_t {
     MayaOpCode opcode;
-    Frame operand;
+    Frame operands[MAYA_OPERANDS_CAP];
 } MayaInstruction;
 
 typedef struct MayaVm_t MayaVm;

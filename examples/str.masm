@@ -1,7 +1,12 @@
+%define printstr 4
+
 entry main
 
 main:
 push "hello world!"
-native 4 # print strings
+native printstr
+
+push "hello, cruel world!"
+native printstr
 
 halt

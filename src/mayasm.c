@@ -85,7 +85,7 @@
                                                                                                 \
             instructions[len++] = (MayaInstruction) {                                           \
                 .opcode = ins,                                                                  \
-                .operand = frame,                                                               \
+                .operands = {frame},                                                             \
             };                                                                                  \
                                                                                                 \
             STRIP_COMMENT(&line);                                                               \
@@ -357,7 +357,7 @@ void maya_translate_asm(MayaEnv* env, const char* buffer, const char* output_pat
 
                     instructions[len++] = (MayaInstruction) {
                         .opcode = OP_PUSH,
-                        .operand = frame,
+                        .operands = {frame},
                     };
 
                     STRIP_COMMENT(&line);
@@ -404,7 +404,7 @@ void maya_translate_asm(MayaEnv* env, const char* buffer, const char* output_pat
 
                     instructions[len++] = (MayaInstruction) {
                         .opcode = OP_DUP,
-                        .operand = frame,
+                        .operands = {frame},
                     };
 
                     STRIP_COMMENT(&line);
@@ -509,7 +509,7 @@ void maya_translate_asm(MayaEnv* env, const char* buffer, const char* output_pat
 
                     instructions[len++] = (MayaInstruction) {
                         .opcode = OP_NATIVE,
-                        .operand = frame,
+                        .operands = {frame},
                     };
 
                     STRIP_COMMENT(&line);
@@ -556,7 +556,7 @@ void maya_translate_asm(MayaEnv* env, const char* buffer, const char* output_pat
 
                     instructions[len++] = (MayaInstruction) {
                         .opcode = OP_LOAD,
-                        .operand = frame,
+                        .operands = {frame},
                     };
 
                     STRIP_COMMENT(&line);
@@ -586,7 +586,127 @@ void maya_translate_asm(MayaEnv* env, const char* buffer, const char* output_pat
 
                     instructions[len++] = (MayaInstruction) {
                         .opcode = OP_STORE,
-                        .operand = frame,
+                        .operands = {frame},
+                    };
+
+                    STRIP_COMMENT(&line);
+                    CHECK_EOL(&line);
+
+                    goto reallocate;
+                } else {
+                    fprintf(stderr, "ERROR: invalid operand: '%.*s'\n", (int)operand.len, operand.str);
+                    exit(EXIT_FAILURE);
+                }
+            }
+
+            if (sv_equals(opcode, sv_from_cstr("load_ptr"))) {
+                StringView operand = sv_chop_by_delim(&line, " ");
+                EXPECT_OPERAND(operand, "load_ptr");
+
+                char type = 0;
+                if (check_is_valid_number(operand, &type)) {
+                    Frame frame;
+
+                    if (type == 0 || type == 'U') {
+                        frame.as_u64 = strtoull(operand.str, NULL, 10);
+                    } else {
+                        fprintf(stderr, "ERROR: load_ptr only accept integer values\n");
+                        exit(EXIT_FAILURE);
+                    }
+
+                    instructions[len++] = (MayaInstruction) {
+                        .opcode = OP_LOAD_PTR,
+                        .operands = {frame},
+                    };
+
+                    STRIP_COMMENT(&line);
+                    CHECK_EOL(&line);
+
+                    goto reallocate;
+                } else {
+                    fprintf(stderr, "ERROR: invalid operand: '%.*s'\n", (int)operand.len, operand.str);
+                    exit(EXIT_FAILURE);
+                }
+            }
+
+            if (sv_equals(opcode, sv_from_cstr("push_ptr"))) {
+                StringView operand = sv_chop_by_delim(&line, " ");
+                EXPECT_OPERAND(operand, "push_ptr");
+
+                char type = 0;
+                Frame first;
+                if (check_is_valid_number(operand, &type)) {
+                    if (type == 0 || type == 'U') {
+                        first.as_u64 = strtoull(operand.str, NULL, 10);
+                    } else {
+                        fprintf(stderr, "ERROR: push_ptr only accept integer values\n");
+                        exit(EXIT_FAILURE);
+                    }
+                } else {
+                    fprintf(stderr, "ERROR: invalid operand: '%.*s'\n", (int)operand.len, operand.str);
+                    exit(EXIT_FAILURE);
+                }
+
+                operand = sv_chop_by_delim(&line, " ");
+                EXPECT_OPERAND(operand, "push_ptr");
+
+                if (check_is_valid_number(operand, &type)) {
+                    Frame second;
+                    if (type == 0 || type == 'U') {
+                        second.as_u64 = strtoull(operand.str, NULL, 10);
+                    } else {
+                        fprintf(stderr, "ERROR: push_ptr only accept integer values\n");
+                        exit(EXIT_FAILURE);
+                    }
+
+                    instructions[len++] = (MayaInstruction) {
+                        .opcode = OP_PUSH_PTR,
+                        .operands = {first, second},
+                    };
+
+                    STRIP_COMMENT(&line);
+                    CHECK_EOL(&line);
+
+                    goto reallocate;
+                } else {
+                    fprintf(stderr, "ERROR: invalid operand: '%.*s'\n", (int)operand.len, operand.str);
+                    exit(EXIT_FAILURE);
+                }
+            }
+
+            if (sv_equals(opcode, sv_from_cstr("store_ptr"))) {
+                StringView operand = sv_chop_by_delim(&line, " ");
+                EXPECT_OPERAND(operand, "store_ptr");
+
+                char type = 0;
+                Frame first;
+                if (check_is_valid_number(operand, &type)) {
+                    if (type == 0 || type == 'U') {
+                        first.as_u64 = strtoull(operand.str, NULL, 10);
+                    } else {
+                        fprintf(stderr, "ERROR: store_ptr only accept integer values\n");
+                        exit(EXIT_FAILURE);
+                    }
+                } else {
+                    fprintf(stderr, "ERROR: invalid operand: '%.*s'\n", (int)operand.len, operand.str);
+                    exit(EXIT_FAILURE);
+                }
+
+                operand = sv_chop_by_delim(&line, " ");
+                EXPECT_OPERAND(operand, "store_ptr");
+
+                if (check_is_valid_number(operand, &type)) {
+                    Frame second;
+                    if (type == 0 || type == 'U') {
+                        second.as_u64 = strtoull(operand.str, NULL, 10);
+                    } else {
+                        fprintf(stderr, "ERROR: store_ptr only accept integer values\n");
+                        exit(EXIT_FAILURE);
+                    }
+
+                    instructions[len++] = (MayaInstruction) {
+                        .opcode = OP_STORE_PTR,
+                        .operands = {first, second},
                     };
 
                     STRIP_COMMENT(&line);
@@ -649,32 +769,4 @@ void maya_translate_asm(MayaEnv* env, const char* buffer, const char* output_pat
 
     fclose(ostream);
     free(instructions);
-
-    size_t bigger = 0;
-    size_t lower = 0;
-    char type = 0;
-    if (env->labels_size >= env->macros_size) {
-        type = 'L';
-        bigger = env->labels_size;
-        lower = env->macros_size;
-    } else {
-        bigger = env->macros_size;
-        lower = env->labels_size;
-    }
-
-    for (size_t i = 0; i < bigger; i++) {
-        for (size_t j = 0; j < lower; j++) {
-            if (type == 'L') {
-                if (sv_equals(env->labels[i].id, env->macros[j].name)) {
-                    fprintf(stderr, "ERROR: duplicate label and macro name '%.*s'\n", (int)env->macros[i].name.len, env->macros[i].name.str);
-                    exit(EXIT_FAILURE);
-                }
-            } else {
-                if (sv_equals(env->labels[j].id, env->macros[i].name)) {
-                    fprintf(stderr, "ERROR: duplicate label and macro name '%.*s'\n", (int)env->macros[i].name.len, env->macros[i].name.str);
-                    exit(EXIT_FAILURE);
-                }
-            }
-        }
-    }
 }

@@ -1,0 +1,32 @@
+%define malloc 0
+%define free 1
+%define printi64 3
+%define printstr 4
+%define printptr 5
+
+entry main
+
+main:
+    push "before:"
+    native printstr
+
+    push 0
+    dup 1
+    native printi64
+
+    load_ptr 1
+    
+    push 69
+    store 0
+    push_ptr 0 0
+
+    store_ptr 1 1
+
+    pop # pop the pointer
+
+    push "after:"
+    native printstr
+
+    native printi64
+
+    halt
